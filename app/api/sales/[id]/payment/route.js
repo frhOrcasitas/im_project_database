@@ -15,7 +15,7 @@ export async function POST(request, { params }) {
 
         // Get sale
         const [sale] = await connection.query(
-            `SELECT sales_totalAmount 
+            `SELECT sales_totalAmount, sales_status 
              FROM tbl_sales 
              WHERE sales_ID = ?`,
             [id]
@@ -27,14 +27,6 @@ export async function POST(request, { params }) {
 
         if (sale[0].sales_status === "Cancelled") {
             throw new Error("Cannot add payment to cancelled sale.");
-        }
-
-        if (saleStatus[0].sales_status === "Cancelled") {
-            throw new Error("Cannot add payment to cancelled sale.");
-        }
-
-        if (sale.length === 0) {
-            throw new Error("Sale not found.");
         }
 
 

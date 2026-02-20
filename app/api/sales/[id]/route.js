@@ -88,6 +88,19 @@ export async function PATCH(request, { params }) {
         // If cancelling, restore stock
         if (status === "Cancelled") {
 
+            const [currentSale] = await connection.query(
+                `SELECT sales_status FROM tbl_sales WHERE sales_ID = ?`,
+                [id]
+            );
+
+            if (currentSale.length === 0) {
+                throw new Error("Sale not found.");
+            }
+
+            if (currentSale[0].sales_status === "Cancelled") {
+                throw new Error("Sale is already cancelled.");
+            }
+
             const [details] = await connection.query(
                 `SELECT productLine_ID, salesDetail_qty
                  FROM tbl_sales_details

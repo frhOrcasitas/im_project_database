@@ -52,13 +52,6 @@ export async function POST(request) {
         }
 
         for (const item of items) {
-            if (productSet.has(item.productLine_ID)) {
-                return Response.json(
-                    { error: "Duplicate product in sale is not allowed."},
-                    { status: 400 }
-                );
-            }
-
             if (item.quantity <= 0) {
                 return Response.json(
                     { error: "Quantity must be greater than zero." },
@@ -72,8 +65,6 @@ export async function POST(request) {
                     { status: 400 }
                 );
             }
-
-            productSet.add(item.productLine_ID);
         }
 
 
@@ -154,6 +145,14 @@ export async function POST(request) {
                 ]
             );
 
+            if (payment.payment_amount <= 0) {
+                throw new Error("Payment amount must be greater than zero.");
+            }
+
+            if (payment.payment_amount > totalAmount) {
+                throw new Error("Payment exceeds total amount.");
+            }
+
             if (payment.payment_amount >= totalAmount) {
                 paymentStatus = "Paid";
             } else if (payment.payment_amount > 0) {
@@ -198,7 +197,7 @@ export async function GET() {
                 e.employee_name
             FROM tbl_sales s
             JOIN tbl_client c ON s.client_ID = c.client_ID
-            JOIN tbl_employee e ON s.employee_ID = e. employee_ID
+            JOIN tbl_employee e ON s.employee_ID = e.employee_ID
             ORDER BY s.sales_createdAt DESC`
         );
 
