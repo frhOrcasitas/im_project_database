@@ -126,3 +126,67 @@ export async function POST(request, { params }) {
         connection.release();
     }
 }
+
+export async function GET(request, { params }) {
+    try {
+        const { id } = params;
+
+        // Check shipment exists
+        const [shipment] = await pool.query(
+            `SELECT shipment_ID
+             FROM tbl_shipment
+             WHERE shipment_ID = ?`,
+            [id]
+        );
+
+        if (shipment.length === 0) {
+            return Response.json(
+                { error: "Shipment not found." },
+                { status: 404 }
+            );
+        }
+
+        // Get unsold header
+        const [unsoldHeader] = await pool.query(
+            `SELECT
+                up.shipment_ID,
+                up.manager_id,
+                up.approved_date,
+                up.description_status
+             FROM tbl_unsold_products up
+             WHERE up.shipment_ID = ?`,
+            [id]
+        );
+
+        if (unsoldHeader.length === 0) {
+            return Response.json(
+                { message: "No unsold record found for this shipment." },
+                { status: 404 }
+            );
+        }
+
+        // Get unsold product details
+        const [unsoldDetails] = await pool.query(
+            `SELECT
+                ud.product_id,
+                p.product_name,
+                ud.product_quantity
+             FROM tbl_unsold_products_details ud
+             JOIN tbl_product p
+                ON ud.product_id = p.product_ID
+             WHERE ud.shipment_ID = ?`,
+            [id]
+        );
+
+        return Response.json({
+            unsold: unsoldHeader[0],
+            products: unsoldDetails
+        });
+
+    } catch (error) {
+        return Response.json(
+            { error: error.message },
+            { status: 500 }
+        );
+    }
+}

@@ -81,12 +81,19 @@ export async function PATCH(request, { params }) {
         const { manager_id, vehicle_id } = body;
 
         const [shipment] = await connection.query(
-            `SELECT shipment_ID FROM tbl_shipment WHERE shipment_ID = ?`,
+            `SELECT sh.shipment_ID,
+                s.sales_status FROM tbl_shipment sh
+                join tbl_sales s ON sh.sales_ID = s.sales_ID
+                WHERE sh.shipment_ID = ?`,
             [id]
         );
 
         if (shipment.length === 0) {
             throw new Error("Shipment not found.");
+        }
+
+        if (shipment[0].sales_status === "Completed") {
+            throw new Error("Cannot update shipment. Sale is already completed.");
         }
 
         if (manager_id) {

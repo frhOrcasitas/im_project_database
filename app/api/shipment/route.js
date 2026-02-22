@@ -34,6 +34,10 @@ export async function POST(request) {
             throw new Error("Cannot create shipment for cancelled sale.");
         }
 
+        if (sale[0].sales_status === "Completed") {
+            throw new Error("Cannot create shipment. Sale is already completed.");
+        }
+
         const [manager] = await connection.query (
             `SELECT manager_ID FROM tbl_manager WHERE manager_ID = ?`,
             [manager_id]
