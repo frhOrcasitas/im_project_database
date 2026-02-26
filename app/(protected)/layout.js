@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
@@ -22,8 +22,13 @@ export default function Layout({ children }) {
   const [user, setUser] = useState({name: "Loading...", role: "User"});
 
   useEffect(() => {
-    const storedName = local
-  })
+    const storedName = localStorage.getItem("userName");
+    const storedRole = localStorage.getItem("userRole");
+
+    if (storedName && storedRole) {
+      setUser({ name: storedName, role: storedRole});
+    }
+  }, []);
 
   return (
     <div className="min-h-screen bg-slate-100 flex flex-col">
@@ -52,11 +57,11 @@ export default function Layout({ children }) {
           </Link>
           <div className="flex items-center gap-2 bg-slate-700 rounded-full px-3 py-1">
             <span className="w-7 h-7 rounded-full bg-blue-500 flex items-center justify-center text-xs font-bold">
-              JD
+              {user.name.charAt(0)}
             </span>
-            <span className="text-slate-200">John Doe</span>
+            <span className="text-slate-200">{user.name}</span>
             <span className="text-xs bg-amber-500 text-white rounded px-1.5 py-0.5 font-medium">
-              Owner
+              {user.role}
             </span>
           </div>
           <Link href="/login" className="text-slate-400 hover:text-red-400 transition-colors text-xs">

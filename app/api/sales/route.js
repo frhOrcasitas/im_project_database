@@ -199,7 +199,7 @@ export async function GET() {
             JOIN tbl_client c ON s.client_ID = c.client_ID
             JOIN tbl_employee e ON s.employee_ID = e.employee_ID
             ORDER BY s.sales_createdAt DESC`
-        );
+        )
 
         return Response.json(rows);
 

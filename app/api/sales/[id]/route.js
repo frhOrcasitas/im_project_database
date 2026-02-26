@@ -2,7 +2,7 @@ import pool from "../../../lib/db";
 
 export async function GET(request, { params }) {
     try {
-        const { id } = params;
+        const { id } = await params;
 
         const [sale] = await pool.query (
             `SELECT 
@@ -10,7 +10,7 @@ export async function GET(request, { params }) {
                 s.sales_totalAmount,
                 s.sales_status,
                 s.sales_paymentStatus,
-                s.sales_date,
+                s.createdAt,
                 c.client_name,
                 e.employee_name
              FROM tbl_sales s

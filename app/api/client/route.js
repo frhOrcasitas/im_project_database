@@ -3,7 +3,12 @@ import pool from "../../lib/db";
 export async function GET() {
 
     try {
-        const [rows] = await pool.query("SELECT * FROM tbl_client");
+        const [rows] = await pool.query(`
+            SELECT 
+                c.*,
+                cust.contactPerson
+            FROM tbl_client c
+            INNER JOIN tbl_customer cust ON c.client_contactPersonID = cust.client_contactPersonID`);
         return Response.json(rows);
 
     } catch (error) {
