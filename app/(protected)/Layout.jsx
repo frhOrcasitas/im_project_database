@@ -19,6 +19,11 @@ const menuItems = [
 export default function Layout({ children }) {
   const pathname = usePathname();
   const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [user, setUser] = useState({name: "Loading...", role: "User"});
+
+  useEffect(() => {
+    const storedName = local
+  })
 
   return (
     <div className="min-h-screen bg-slate-100 flex flex-col">

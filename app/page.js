@@ -2,17 +2,36 @@
 
 import { useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 
 export default function Login() {
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [remember, setRemember] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
+  const router = useRouter();
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
-    // Handle login
-  };
+
+    try {
+      const response = await fetch('api/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json'},
+        body: JSON.stringify({username, password}),
+      });
+
+      const data = await response.json();
+
+      if (data.success) {
+        router.push("/dashboard");
+      } else {
+        alert("Login failed!");
+      }
+    } catch (err) {
+      console.error("Login Error: ", err);
+    }
+  }
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-800 via-slate-700 to-blue-900 flex items-center justify-center p-4">
@@ -38,7 +57,7 @@ export default function Login() {
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
                 required
-                className="w-full border border-slate-300 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all"
+                className="w-full border border-slate-300 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all text-black"
               />
             </div>
 
@@ -53,7 +72,7 @@ export default function Login() {
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   required
-                  className="w-full border border-slate-300 rounded-xl px-4 py-3 text-sm pr-10 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all"
+                  className="w-full border border-slate-300 rounded-xl px-4 py-3 text-sm pr-10 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all text-black"
                 />
                 <button
                   type="button"
