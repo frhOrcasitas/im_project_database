@@ -51,6 +51,14 @@ export async function POST(request, { params }) {
             [status, newBalance, id]
         );
 
+        await connection.query(
+            `UPDATE tbl_client c
+             JOIN tbl_sales s ON c.client_ID = s.client_ID
+             SET c.client_outstandingbalance = c.client_outstandingbalance - ?
+             WHERE s.sales_ID = ?`,
+            [payment_amount, id]
+        );
+
         await connection.commit();
         return Response.json({ message: "Payment added successfully." });
 

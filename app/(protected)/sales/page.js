@@ -47,29 +47,32 @@ export default function Sales() {
   }, []);
 
   const handleCompleteSale = async () => {
-    if (!selectedCustomer) return alert("Please select a customer.");
-    if (orderItems.length === 0) return alert("Order is empty.");
-    if (!paymentType) return alert("Please select a payment type.");
-    if (isSubmitting) return;
+      if (!selectedCustomer) return alert("Please select a customer.");
+      if (orderItems.length === 0) return alert("Order is empty.");
+      if (!paymentType) return alert("Please select a payment type.");
+      if (isSubmitting) return;
 
-    const salePayload = {
-      client_ID: selectedCustomer.client_ID,
-      employee_ID: 1,
-      sales_notes: orderNotes,
-      delivery_address: deliveryAddress,
-      items: orderItems.map(item => ({
-        productLine_ID: item.product_ID,
-        quantity: item.qty,
-        unitPrice: item.price
-      })),
-      payment: {
-        payment_type: paymentType,
-        payment_amount: parseFloat(paymentAmount) || 0,
-        employee_ID: 1
-      }
-    };
+      // --- ADD THIS LINE HERE ---
+      const currentEmployeeID = 1; // Use 1 for testing, or your actual admin ID
 
-    setIsSubmitting(true);
+      const salePayload = {
+        client_ID: selectedCustomer.client_ID,
+        employee_ID: currentEmployeeID, 
+        sales_notes: orderNotes, // Added this to capture your notes state
+        items: orderItems.map(item => ({
+          productLine_ID: item.product_ID, 
+          quantity: item.qty,
+          unitPrice: item.price
+        })),
+        payment: {
+          // Changed amountPaid to paymentAmount to match your state variable
+          payment_amount: parseFloat(paymentAmount) || 0, 
+          payment_type: paymentType,
+          employee_ID: currentEmployeeID
+        }
+      };
+
+      setIsSubmitting(true);
 
     try {
       const res = await fetch("/api/sales", {
@@ -113,6 +116,9 @@ export default function Sales() {
 
   const handleAddToOrder = (product) => {
     const qty = quantities[product.product_ID] || 1;
+    // We keep the price flexible here so it can be edited in the summary if needed
+    const priceToUse = product.product_unitPrice; 
+
     const existing = orderItems.find((i) => i.product_ID === product.product_ID);
 
     if (existing) {
@@ -125,7 +131,7 @@ export default function Sales() {
       setOrderItems([...orderItems, {
         product_ID: product.product_ID,
         name: product.product_name,
-        price: product.product_unitPrice,
+        price: priceToUse, // This maps to your unitPrice in the payload
         qty
       }]);
     }
@@ -136,9 +142,7 @@ export default function Sales() {
   };
 
   const subtotal = orderItems.reduce((sum, item) => sum + item.price * item.qty, 0);
-  const discountRate = selectedCustomer?.discount || 0;
-  const discountAmount = (subtotal * discountRate) / 100;
-  const total = subtotal - discountAmount + DELIVERY_FEE;
+  const total = subtotal + DELIVERY_FEE;
 
   const formatCurrency = (amount) =>
     `₱${amount.toLocaleString("en-PH", { minimumFractionDigits: 2 })}`;
@@ -250,10 +254,10 @@ export default function Sales() {
                 </label>
                 <input
                   type="text"
-                  value={selectedCustomer ? formatCurrency(selectedCustomer.balance || 0) : ""}
+                  value={selectedCustomer ? formatCurrency(selectedCustomer.client_outstandingbalance || 0) : ""}
                   readOnly
                   className={`w-full border border-gray-300 rounded px-3 py-2 text-sm bg-gray-100 font-bold ${
-                    selectedCustomer?.balance > 0 ? "text-red-600" : "text-green-700"
+                    selectedCustomer?.client_outstandingbalance > 0 ? "text-red-600" : "text-green-700"
                   }`}
                 />
               </div>
@@ -322,6 +326,24 @@ export default function Sales() {
         <div className="w-80 flex-shrink-0">
           <div className="bg-white rounded-lg border-2 border-gray-300 p-5 shadow-md sticky top-6">
             <h2 className="text-xl font-black text-gray-900 mb-4 border-b pb-2">Order Summary</h2>
+
+            {/* Payment Type Selection */}
+            <div className="mb-3">
+                <label className="block text-sm font-bold text-gray-800 mb-1">
+                    Payment Type <span className="text-red-600">*</span>
+                </label>
+                <select
+                    value={paymentType}
+                    onChange={(e) => setPaymentType(e.target.value)}
+                    className="w-full border-2 border-gray-400 rounded px-3 py-2 text-sm focus:ring-2 focus:ring-green-500 font-bold text-gray-900 bg-white"
+                >
+                    <option value="">-- Select Type --</option>
+                    <option value="Cash">Cash</option>
+                    <option value="GCash">GCash</option>
+                    <option value="Bank Transfer">Bank Transfer</option>
+                    <option value="Check">Check</option>
+                </select>
+            </div>
 
             <div className="mb-4">
                 <label className="block text-sm font-bold text-gray-800 mb-1">Amount Paid:</label>
