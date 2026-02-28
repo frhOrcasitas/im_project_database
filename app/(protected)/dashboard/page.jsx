@@ -1,6 +1,7 @@
 "use client";
 import { useState, useEffect } from "react";
 import Link from "next/link";
+import QuickActions from "../components/quickactions";
 
 export default function Dashboard() {
   const [data, setData] = useState(null);
@@ -142,12 +143,7 @@ export default function Dashboard() {
         {/* Quick Actions & Summary */}
         <div className="bg-white rounded-xl shadow-sm p-5">
           <h2 className="text-base font-semibold text-slate-700 mb-4">Quick Actions</h2>
-          <div className="flex flex-col gap-3">
-            <Link href="/sales/new" className="w-full bg-green-600 hover:bg-green-700 text-white font-medium py-2.5 px-4 rounded-lg text-center text-sm transition-colors">+ New Sale</Link>
-            <Link href="/inventory" className="w-full bg-blue-600 hover:bg-blue-700 text-white font-medium py-2.5 px-4 rounded-lg text-center text-sm transition-colors">📦 Check Inventory</Link>
-            <Link href="/customers" className="w-full bg-slate-200 hover:bg-slate-300 text-slate-700 font-medium py-2.5 px-4 rounded-lg text-center text-sm transition-colors">👥 Add Customer</Link>
-            <Link href="/reports" className="w-full bg-slate-200 hover:bg-slate-300 text-slate-700 font-medium py-2.5 px-4 rounded-lg text-center text-sm transition-colors">📊 Generate Report</Link>
-          </div>
+          <QuickActions />
 
           <div className="mt-6 border-t border-slate-100 pt-4">
             <h3 className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-3">Inventory Snapshot</h3>

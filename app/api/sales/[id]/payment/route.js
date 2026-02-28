@@ -1,67 +1,44 @@
+import pool from "../../../../lib/db";
+
 export async function POST(request, { params }) {
     const connection = await pool.getConnection();
+    const { id } = await params; // sales_ID
+    const { payment_type, payment_ORNumber, payment_amount, employee_ID } = await request.json();
 
     try {
         await connection.beginTransaction();
 
-        // 1. Next.js 15 Fix: Await params
-        const { id } = await params; 
-        const { payment_type, payment_amount, employee_ID } = await request.json();
+        // 1. Get current balance and client_ID
+        const [sale] = await connection.query(
+            "SELECT sales_Balance, client_ID FROM tbl_sales WHERE sales_ID = ?", [id]
+        );
 
-        if (payment_amount <= 0) {
-            throw new Error("Payment amount must be greater than zero.");
+        if (payment_amount > sale[0].sales_Balance) {
+            throw new Error("Payment exceeds balance.");
         }
 
-        // 2. Get current sale data
-        const [sale] = await connection.query(
-            `SELECT sales_totalAmount, sales_status FROM tbl_sales WHERE sales_ID = ?`,
-            [id]
-        );
-
-        if (sale.length === 0) throw new Error("Sale not found.");
-        if (sale[0].sales_status === "Cancelled") throw new Error("Cannot add payment to cancelled sale.");
-
-        // 3. Get existing payment totals
-        const [payments] = await connection.query(
-            `SELECT IFNULL(SUM(payment_amount), 0) as total_paid FROM tbl_payment_details WHERE sales_ID = ?`,
-            [id]
-        );
-
-        const totalPaidBefore = Number(payments[0].total_paid);
-        const totalAmount = Number(sale[0].sales_totalAmount);
-        const newTotalPaid = totalPaidBefore + Number(payment_amount);
-
-        if (totalPaidBefore === totalAmount) throw new Error("Sale is already fully paid.");
-        if (newTotalPaid > totalAmount) throw new Error("Payment exceeds remaining balance.");
-
-        // 4. Record the payment
+        // 2. Insert into tbl_payment_details (Match your schema exactly)
         await connection.query(
-            `INSERT INTO tbl_payment_details (sales_ID, payment_type, payment_paidDate, payment_amount, employee_ID)
-             VALUES (?, ?, CURDATE(), ?, ?)`,
-            [id, payment_type, payment_amount, employee_ID]
+            `INSERT INTO tbl_payment_details 
+            (sales_ID, payment_type, payment_ORNumber, payment_paidDate, payment_amount, employee_ID) 
+            VALUES (?, ?, ?, CURDATE(), ?, ?)`,
+            [id, payment_type, payment_ORNumber, payment_amount, employee_ID]
         );
 
-        // 5. Calculate final status and balance
-        const newBalance = totalAmount - newTotalPaid;
-        let status = newBalance <= 0 ? "Paid" : "Partial";
-
-        // 6. Update tbl_sales with both Status AND Balance
+        // 3. Update Sale Balance
         await connection.query(
-            `UPDATE tbl_sales SET sales_paymentStatus = ?, sales_Balance = ? WHERE sales_ID = ?`,
-            [status, newBalance, id]
-        );
-
-        await connection.query(
-            `UPDATE tbl_client c
-             JOIN tbl_sales s ON c.client_ID = s.client_ID
-             SET c.client_outstandingbalance = c.client_outstandingbalance - ?
-             WHERE s.sales_ID = ?`,
+            "UPDATE tbl_sales SET sales_Balance = sales_Balance - ? WHERE sales_ID = ?",
             [payment_amount, id]
         );
 
-        await connection.commit();
-        return Response.json({ message: "Payment added successfully." });
+        // 4. Update Client Total Debt (tbl_client.client_outstandingbalance)
+        await connection.query(
+            "UPDATE tbl_client SET client_outstandingbalance = client_outstandingbalance - ? WHERE client_ID = ?",
+            [payment_amount, sale[0].client_ID]
+        );
 
+        await connection.commit();
+        return Response.json({ message: "Payment recorded successfully" });
     } catch (error) {
         await connection.rollback();
         return Response.json({ error: error.message }, { status: 500 });

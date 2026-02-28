@@ -41,7 +41,7 @@ export async function POST(request) {
         const [salesResult] = await connection.query(
             `INSERT INTO tbl_sales 
             (client_ID, employee_ID, sales_notes, sales_totalAmount, sales_status)
-            VALUES (?, ?, ?, ?, 'Completed')`,
+            VALUES (?, ?, ?, ?, 'Pending')`,
             [client_ID, employee_ID, sales_notes, totalAmount]
         );
 

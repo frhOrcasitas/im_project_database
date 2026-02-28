@@ -17,12 +17,16 @@ export async function GET(request) {
 
         const [rows] = await pool.query(
             `SELECT
-                DATE(sales_date) as sale_date,
-                COUNT(*) as total_transactions,
-                SUM(sales_totalAmount) as total_sales
-            FROM tbl_sales
-            WHERE DATE(sales_date) = ?
-            GROUP BY DATE (sales_date)`,
+                DATE(s.sales_createdAt) AS sale_date,
+                COUNT(*) AS total_transactions,
+                SUM(s.sales_totalAmount) AS total_sales,
+                SUM(CASE WHEN s.sales_paymentStatus = 'Paid' THEN s.sales_totalAmount ELSE 0 END) AS total_collected,
+                SUM(s.sales_Balance) AS total_outstanding,
+                COUNT(CASE WHEN s.sales_paymentStatus = 'Unpaid' THEN 1 END) AS unpaid_count,
+                COUNT(CASE WHEN s.sales_paymentStatus = 'Partial' THEN 1 END) AS partial_count
+            FROM tbl_sales s
+            WHERE DATE(s.sales_createdAt) = ?
+            GROUP BY DATE(s.sales_createdAt)`,
             [date]
         );
 

@@ -16,18 +16,40 @@ export async function GET() {
     }
 }
 
+// ✅ FIX — create contact person first if not provided
 export async function POST(request) {
+    const connection = await pool.getConnection();
     try {
+        await connection.beginTransaction();
+        
         const body = await request.json();
-        const { client_name, client_contactNumber, client_email, client_address, client_contactPersonID, TIN_Code, client_outstandingbalance} = body;
+        const { client_name, client_contactNumber, client_email, 
+                client_address, TIN_Code, contactPerson } = body;
 
-        const [result] = await pool.query(
-            `INSERT INTO tbl_client (client_name, client_contactNumber, client_email, client_address, client_contactPersonID, TIN_Code, client_outstandingbalance) VALUES (?, ?, ?, ?, ?, ?, ?)`,
-            [client_name, client_contactNumber, client_email, client_address, client_contactPersonID, TIN_Code, client_outstandingbalance]
+        // 1. Insert contact person first
+        const [personResult] = await connection.query(
+            `INSERT INTO tbl_customer (contactPerson) VALUES (?)`,
+            [contactPerson]
         );
-        return Response.json({message: "Client created successfully"});
+        const client_contactPersonID = personResult.insertId;
+
+        // 2. Then insert client
+        await connection.query(
+            `INSERT INTO tbl_client 
+             (client_name, client_contactNumber, client_email, client_address, 
+              client_contactPersonID, TIN_Code, client_outstandingbalance) 
+             VALUES (?, ?, ?, ?, ?, ?, 0)`,
+            [client_name, client_contactNumber, client_email, 
+             client_address, client_contactPersonID, TIN_Code || null]
+        );
+
+        await connection.commit();
+        return Response.json({ message: "Client created successfully." });
 
     } catch (error) {
-        return Response.json({error: error.message }, {status: 500});
+        await connection.rollback();
+        return Response.json({ error: error.message }, { status: 500 });
+    } finally {
+        connection.release();
     }
 }

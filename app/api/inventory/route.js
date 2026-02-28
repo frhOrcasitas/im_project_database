@@ -61,7 +61,7 @@ export async function POST(request) {
 
             const subtotal = actual_quantity * unitPrice;
 
-            totalInventory += subtotal;
+            totalInventoryValue += subtotal;
 
             // Insert Inventory Detail
             await connection.query(
@@ -114,12 +114,15 @@ export async function GET() {
     try {
         const [rows] = await pool.query(
             `SELECT
-                inventory_ID,
-                inventory_date,
-                manager_ID,
-                inventory_total
-             FROM tbl_inventory
-             ORDER BY inventory_date DESC`
+                i.inventory_ID,
+                i.inventory_date,
+                i.inventory_total,
+                m.manager_ID,
+                e.employee_name AS manager_name
+            FROM tbl_inventory i
+            JOIN tbl_manager m ON i.manager_ID = m.manager_ID
+            JOIN tbl_employee e ON m.employee_ID = e.employee_ID
+            ORDER BY i.inventory_date DESC`
         );
 
         return Response.json(rows);

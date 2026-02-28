@@ -1,127 +1,66 @@
 import pool from "../../../../lib/db";
 
-// Post - registering unsold products 
 export async function POST(request, { params }) {
     const connection = await pool.getConnection();
+    const { id } = await params; // shipment_ID
+    const { manager_id, description_status, items } = await request.json();
 
     try {
         await connection.beginTransaction();
 
-        const { id } = params;
-        const body = await request.json();
-        const { manager_id, description_status, items } = body;
-
-        if (!items || items.length === 0) {
-            return Response.json(
-                { error: "Unsold must contain at least one product." },
-                { status: 400 }
-            );
-        }
-
-        // Validate shipment exists
-        const [shipment] = await connection.query(
-            `SELECT shipment_ID 
-             FROM tbl_shipment 
-             WHERE shipment_ID = ?`,
-            [id]
-        );
-
-        if (shipment.length === 0) {
-            throw new Error("Shipment not found.");
-        }
-
-        const [existingUnsold] = await connection.query(
-            `SELECT shipment_ID
-            FROM tbl_unsold_products
-            WHERE shipment_ID = ?`,
-            [id]
-        );
-
-        if (existingUnsold.length > 0) {
-            throw new Error("Unsold already recorded for this shipment.");
-        }
-
-        // Prevent duplicate product in same unsold request
-        const productSet = new Set();
-        for (const item of items) {
-            if (productSet.has(item.product_ID)) {
-                return Response.json(
-                    { error: "Duplicate product in unsold list is not allowed." },
-                    { status: 400 }
-                );
-            }
-            productSet.add(item.product_ID);
-
-            if (item.quantity <= 0) {
-                return Response.json(
-                    { error: "Unsold quantity must be greater than zero." },
-                    { status: 400 }
-                );
-            }
-        }
-
-        // Insert unsold header
+        // Header: tbl_unsold_products (matches your schema)
         await connection.query(
-            `INSERT INTO tbl_unsold_products
-            (shipment_ID, manager_id, approved_date, description_status)
-            VALUES (?, ?, CURDATE(), ?)`,
-            [id, manager_id, description_status || null]
+            `INSERT INTO tbl_unsold_products (shipment_ID, manager_id, approved_date, description_status) 
+             VALUES (?, ?, CURDATE(), ?)`,
+            [id, manager_id, description_status]
         );
 
-        // Process each unsold item
         for (const item of items) {
-
-            // Get shipped quantity for this shipment
-            const [shipped] = await connection.query(
-                `SELECT product_quantity
-                 FROM tbl_shipment_productdetails
-                 WHERE shipment_ID = ?
-                 AND productLine_ID = ?`,
-                [id, item.product_ID]
+            // Find the original price using productLine_ID from your tbl_sales_details schema
+            const [details] = await connection.query(
+                `SELECT sd.salesDetail_unitPriceSold, s.sales_ID, s.client_ID 
+                 FROM tbl_sales_details sd
+                 JOIN tbl_sales s ON sd.sales_ID = s.sales_ID
+                 JOIN tbl_shipment sh ON s.sales_ID = sh.sales_ID
+                 WHERE sh.shipment_ID = ? AND sd.productLine_ID = ?`,
+                [id, item.productLine_ID]
             );
 
-            if (shipped.length === 0) {
-                throw new Error("Product was not part of this shipment.");
-            }
+            if (details.length > 0) {
+                const { salesDetail_unitPriceSold, sales_ID, client_ID } = details[0];
+                const subtotal = salesDetail_unitPriceSold * item.product_quantity;
 
-            const shippedQty = shipped[0].product_quantity;
+                // Detail: tbl_unsold_products_details
+                await connection.query(
+                    `INSERT INTO tbl_unsold_products_details (shipment_ID, product_id, product_quantity, product_subtotal) 
+                     VALUES (?, ?, ?, ?)`,
+                    [id, item.product_id, item.product_quantity, subtotal]
+                );
 
-            if (item.quantity > shippedQty) {
-                throw new Error(
-                    `Unsold quantity exceeds shipped quantity (${shippedQty}).`
+                // Update Stock (Assume tbl_product.product_ID)
+                await connection.query(
+                    "UPDATE tbl_product SET product_stockQty = product_stockQty + ? WHERE product_ID = ?",
+                    [item.product_quantity, item.product_id]
+                );
+
+                // Reduce balances so the company doesn't claim money for returned goods
+                await connection.query(
+                    "UPDATE tbl_sales SET sales_totalAmount = sales_totalAmount - ?, sales_Balance = sales_Balance - ? WHERE sales_ID = ?",
+                    [subtotal, subtotal, sales_ID]
+                );
+
+                await connection.query(
+                    "UPDATE tbl_client SET client_outstandingbalance = client_outstandingbalance - ? WHERE client_ID = ?",
+                    [subtotal, client_ID]
                 );
             }
-
-            // Insert unsold detail
-            await connection.query(
-                `INSERT INTO tbl_unsold_products_details
-                (shipment_ID, product_id, product_quantity)
-                VALUES (?, ?, ?)`,
-                [id, item.product_ID, item.quantity]
-            );
-
-            // Restore stock
-            await connection.query(
-                `UPDATE tbl_product
-                 SET product_stockQty = product_stockQty + ?
-                 WHERE product_ID = ?`,
-                [item.quantity, item.product_ID]
-            );
         }
 
         await connection.commit();
-
-        return Response.json({
-            message: "Unsold products recorded successfully."
-        });
-
+        return Response.json({ message: "Unsold items logged and balances adjusted" });
     } catch (error) {
         await connection.rollback();
-        return Response.json(
-            { error: error.message },
-            { status: 500 }
-        );
-
+        return Response.json({ error: error.message }, { status: 500 });
     } finally {
         connection.release();
     }

@@ -69,70 +69,37 @@ export async function GET(request, { params }) {
 
 export async function PATCH(request, { params }) {
     const connection = await pool.getConnection();
-
     try {
         await connection.beginTransaction();
 
-        const { id } = params;
+        const { id } = await params; // FIXED: Await params
         const { status } = await request.json();
 
         const allowedStatuses = ["Completed", "Cancelled", "Pending"];
-
         if (!allowedStatuses.includes(status)) {
-            return Response.json(
-                { error: "Invalid status value." },
-                { status: 400 }
-            );
+            return Response.json({ error: "Invalid status" }, { status: 400 });
         }
 
-        // If cancelling, restore stock
-        if (status === "Cancelled") {
-
-            const [currentSale] = await connection.query(
-                `SELECT sales_status FROM tbl_sales WHERE sales_ID = ?`,
-                [id]
-            );
-
-            if (currentSale.length === 0) {
-                throw new Error("Sale not found.");
-            }
-
-            if (currentSale[0].sales_status === "Cancelled") {
-                throw new Error("Sale is already cancelled.");
-            }
-
+        // Check if already cancelled to prevent double-restoring stock
+        const [current] = await connection.query("SELECT sales_status FROM tbl_sales WHERE sales_ID = ?", [id]);
+        if (current.length > 0 && current[0].sales_status !== "Cancelled" && status === "Cancelled") {
             const [details] = await connection.query(
-                `SELECT productLine_ID, salesDetail_qty
-                 FROM tbl_sales_details
-                 WHERE sales_ID = ?`,
-                [id]
+                `SELECT productLine_ID, salesDetail_qty FROM tbl_sales_details WHERE sales_ID = ?`, [id]
             );
-
             for (const item of details) {
                 await connection.query(
-                    `UPDATE tbl_product
-                     SET product_stockQty = product_stockQty + ?
-                     WHERE product_ID = ?`,
+                    `UPDATE tbl_product SET product_stockQty = product_stockQty + ? WHERE product_ID = ?`,
                     [item.salesDetail_qty, item.productLine_ID]
                 );
             }
         }
 
-        await connection.query(
-            `UPDATE tbl_sales
-             SET sales_status = ?
-             WHERE sales_ID = ?`,
-            [status, id]
-        );
-
+        await connection.query("UPDATE tbl_sales SET sales_status = ? WHERE sales_ID = ?", [status, id]);
         await connection.commit();
-
-        return Response.json({ message: "Sale status updated." });
-
+        return Response.json({ message: "Status updated" });
     } catch (error) {
         await connection.rollback();
         return Response.json({ error: error.message }, { status: 500 });
-
     } finally {
         connection.release();
     }
