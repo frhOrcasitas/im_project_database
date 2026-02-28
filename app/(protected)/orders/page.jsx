@@ -1,23 +1,20 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 
-const orders = [
-  { id: "#ORD-2045", customer: "ABC Store", date: "Feb 13, 2026", amount: "₱8,500", items: 3, driver: "Juan dela Cruz", vehicle: "TRK-01", status: "Delivered" },
-  { id: "#ORD-2044", customer: "XYZ Mart", date: "Feb 13, 2026", amount: "₱12,300", items: 5, driver: "Pedro Santos", vehicle: "TRK-02", status: "In Transit" },
-  { id: "#ORD-2043", customer: "Quick Shop", date: "Feb 12, 2026", amount: "₱5,600", items: 2, driver: "—", vehicle: "—", status: "Processing" },
-  { id: "#ORD-2042", customer: "Metro Store", date: "Feb 12, 2026", amount: "₱9,800", items: 4, driver: "—", vehicle: "—", status: "Pending Production" },
-  { id: "#ORD-2041", customer: "City Mart", date: "Feb 11, 2026", amount: "₱3,200", items: 1, driver: "Juan dela Cruz", vehicle: "TRK-01", status: "Delivered" },
-];
-
+// Helper to map DB status to UI styles
 const statusBadge = (status) => {
   const map = {
-    Delivered: "bg-green-100 text-green-700",
-    "In Transit": "bg-blue-100 text-blue-700",
-    Processing: "bg-amber-100 text-amber-700",
-    "Pending Production": "bg-red-100 text-red-700",
+    Completed: "bg-green-100 text-green-700",    // Sale finished
+    Pending: "bg-red-100 text-red-700",       // Not yet shipped
+    "In Transit": "bg-blue-100 text-blue-700", // Partially shipped
+    Cancelled: "bg-gray-100 text-gray-700",
   };
-  return <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${map[status] || "bg-gray-100 text-gray-600"}`}>{status}</span>;
+  return (
+    <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${map[status] || "bg-amber-100 text-amber-700"}`}>
+      {status}
+    </span>
+  );
 };
 
 const flowSteps = [
@@ -30,70 +27,99 @@ const flowSteps = [
 ];
 
 export default function Orders() {
+  const [sales, setSales] = useState([]);
+  const [loading, setLoading] = useState(true);
   const [statusFilter, setStatusFilter] = useState("all");
 
-  const filtered = orders.filter(
-    (o) => statusFilter === "all" || o.status === statusFilter
+  // 1. Fetch Sales from Backend
+  useEffect(() => {
+    async function fetchSales() {
+      try {
+        const res = await fetch("/api/sales");
+        const data = await res.json();
+        setSales(data);
+      } catch (error) {
+        console.error("Failed to fetch orders:", error);
+      } finally {
+        setLoading(false);
+      }
+    }
+    fetchSales();
+  }, []);
+
+  // 2. Filter Logic
+  const filtered = sales.filter(
+    (s) => statusFilter === "all" || s.sales_status === statusFilter
   );
 
+  // 3. Live Stats Calculation
+  const stats = {
+    pending: sales.filter(s => s.sales_status === 'Pending').length,
+    completed: sales.filter(s => s.sales_status === 'Completed').length,
+    revenue: sales.reduce((acc, curr) => acc + Number(curr.sales_totalAmount), 0)
+  };
+
+  if (loading) return <div className="p-10 text-center text-slate-500">Connecting to Database...</div>;
+
   return (
-    <div>
+    <div className="p-4 lg:p-8 max-w-7xl mx-auto">
       <div className="flex items-center justify-between mb-6">
         <h1 className="text-2xl font-bold text-slate-800">Order & Shipment Management</h1>
-        <button className="bg-green-600 hover:bg-green-700 text-white text-sm font-medium px-4 py-2 rounded-lg">
+        <button className="bg-green-600 hover:bg-green-700 text-white text-sm font-medium px-4 py-2 rounded-lg transition-colors">
           + New Order
         </button>
       </div>
 
-      {/* Order Flow */}
-      <div className="bg-white rounded-xl shadow-sm p-5 mb-6">
+      {/* Order Flow Visualization */}
+      <div className="bg-white rounded-xl shadow-sm p-5 mb-6 border border-slate-100">
         <h2 className="text-sm font-semibold text-slate-600 uppercase tracking-wide mb-4">Order Processing Flow</h2>
-        <div className="flex items-start gap-1 overflow-x-auto pb-2">
+        <div className="flex items-start gap-1 overflow-x-auto pb-4 custom-scrollbar">
           {flowSteps.map((step, i) => (
             <div key={step.label} className="flex items-center flex-shrink-0">
-              <div className={`border-2 ${step.color} rounded-xl p-3 text-center min-w-[110px]`}>
+              <div className={`border-2 ${step.color} rounded-xl p-3 text-center min-w-[120px]`}>
                 <div className="text-2xl mb-1">{step.icon}</div>
-                <div className="text-xs font-semibold text-slate-700">{step.label}</div>
-                <div className="text-xs text-slate-500 mt-0.5">{step.sub}</div>
+                <div className="text-xs font-bold text-slate-700">{step.label}</div>
+                <div className="text-[10px] text-slate-500 mt-0.5 leading-tight">{step.sub}</div>
               </div>
               {i < flowSteps.length - 1 && (
-                <div className="text-slate-300 text-xl px-1 flex-shrink-0">→</div>
+                <div className="text-slate-300 text-xl px-2 flex-shrink-0">→</div>
               )}
             </div>
           ))}
         </div>
       </div>
 
-      {/* Stats */}
-      <div className="grid grid-cols-2 lg:grid-cols-5 gap-4 mb-6">
+      {/* Dynamic Stats Cards */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
         {[
-          { label: "Pending Orders", value: 23, color: "text-slate-800" },
-          { label: "In Production", value: 4, color: "text-amber-500" },
-          { label: "In Transit", value: 8, color: "text-blue-600" },
-          { label: "Delivered Today", value: 11, color: "text-green-600" },
-          { label: "Today's Revenue", value: "₱45K", color: "text-green-700" },
+          { label: "Pending Orders", value: stats.pending, color: "text-red-500" },
+          { label: "Completed", value: stats.completed, color: "text-green-600" },
+          { label: "Total Sales", value: sales.length, color: "text-blue-600" },
+          { label: "Total Revenue", value: `₱${stats.revenue.toLocaleString()}`, color: "text-slate-800" },
         ].map((s) => (
-          <div key={s.label} className="bg-white rounded-xl shadow-sm p-4 text-center">
-            <div className="text-xs text-slate-500 uppercase tracking-wide mb-1">{s.label}</div>
+          <div key={s.label} className="bg-white rounded-xl shadow-sm p-4 text-center border border-slate-100">
+            <div className="text-[10px] text-slate-500 uppercase tracking-wide mb-1 font-semibold">{s.label}</div>
             <div className={`text-2xl font-bold ${s.color}`}>{s.value}</div>
           </div>
         ))}
       </div>
 
-      {/* Table */}
-      <div className="bg-white rounded-xl shadow-sm p-5">
-        <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
-          <h2 className="text-base font-semibold text-slate-700">Orders</h2>
+      {/* Live Orders Table */}
+      <div className="bg-white rounded-xl shadow-sm p-5 border border-slate-100">
+        <div className="flex flex-wrap items-center justify-between gap-3 mb-6">
+          <h2 className="text-base font-bold text-slate-700">Recent Sales Orders</h2>
           <div className="flex gap-2 flex-wrap">
-            {["all", "Pending Production", "Processing", "In Transit", "Delivered"].map((s) => (
+            {["all", "Pending", "Completed", "Cancelled"].map((status) => (
               <button
-                key={s}
-                onClick={() => setStatusFilter(s)}
-                className={`text-xs font-medium px-3 py-1.5 rounded-lg transition-colors ${
-                  statusFilter === s ? "bg-blue-600 text-white" : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+                key={status}
+                onClick={() => setStatusFilter(status)}
+                className={`text-xs font-semibold px-3 py-1.5 rounded-lg transition-all ${
+                  statusFilter === status 
+                  ? "bg-slate-800 text-white shadow-md" 
+                  : "bg-slate-100 text-slate-600 hover:bg-slate-200"
                 }`}
               >
-                {s === "all" ? "All" : s}
+                {status.charAt(0).toUpperCase() + status.slice(1)}
               </button>
             ))}
           </div>
@@ -103,32 +129,43 @@ export default function Orders() {
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-slate-200">
-                {["Order #", "Customer", "Date", "Items", "Amount", "Driver", "Vehicle", "Status", "Actions"].map((h) => (
-                  <th key={h} className="text-left py-2 px-3 text-xs font-semibold text-slate-500 uppercase tracking-wide">{h}</th>
+                {["Order #", "Customer", "Date", "Amount", "Balance", "Status", "Actions"].map((h) => (
+                  <th key={h} className="text-left py-3 px-3 text-[10px] font-bold text-slate-400 uppercase tracking-widest">{h}</th>
                 ))}
               </tr>
             </thead>
-            <tbody>
-              {filtered.map((o) => (
-                <tr key={o.id} className="border-b border-slate-50 hover:bg-slate-50 transition-colors">
-                  <td className="py-3 px-3 font-medium text-blue-600">{o.id}</td>
-                  <td className="py-3 px-3 text-slate-700">{o.customer}</td>
-                  <td className="py-3 px-3 text-slate-500">{o.date}</td>
-                  <td className="py-3 px-3 text-slate-600">{o.items}</td>
-                  <td className="py-3 px-3 font-semibold text-slate-800">{o.amount}</td>
-                  <td className="py-3 px-3 text-slate-600">{o.driver}</td>
-                  <td className="py-3 px-3 text-slate-600">{o.vehicle}</td>
-                  <td className="py-3 px-3">{statusBadge(o.status)}</td>
-                  <td className="py-3 px-3">
-                    <div className="flex gap-1">
-                      <button className="text-xs bg-blue-100 text-blue-700 hover:bg-blue-200 px-2 py-1 rounded transition-colors">View</button>
-                      <button className="text-xs bg-slate-100 text-slate-600 hover:bg-slate-200 px-2 py-1 rounded transition-colors">Assign</button>
+            <tbody className="divide-y divide-slate-50">
+              {filtered.map((s) => (
+                <tr key={s.sales_ID} className="hover:bg-slate-50 transition-colors group">
+                  <td className="py-4 px-3 font-bold text-blue-600">#ORD-{s.sales_ID}</td>
+                  <td className="py-4 px-3 text-slate-700 font-medium">{s.client_name}</td>
+                  <td className="py-4 px-3 text-slate-500">{new Date(s.sales_date).toLocaleDateString()}</td>
+                  <td className="py-4 px-3 font-bold text-slate-800">₱{Number(s.sales_totalAmount).toLocaleString()}</td>
+                  <td className="py-4 px-3">
+                    <span className={Number(s.sales_Balance) > 0 ? "text-red-500 font-bold" : "text-slate-400"}>
+                      ₱{Number(s.sales_Balance).toLocaleString()}
+                    </span>
+                  </td>
+                  <td className="py-4 px-3">{statusBadge(s.sales_status)}</td>
+                  <td className="py-4 px-3">
+                    <div className="flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                      <button className="text-[10px] font-bold uppercase tracking-wider bg-blue-50 text-blue-600 hover:bg-blue-600 hover:text-white px-3 py-1.5 rounded-md transition-all">
+                        View
+                      </button>
+                      {s.sales_status === 'Pending' && (
+                        <button className="text-[10px] font-bold uppercase tracking-wider bg-orange-50 text-orange-600 hover:bg-orange-600 hover:text-white px-3 py-1.5 rounded-md transition-all">
+                          Ship
+                        </button>
+                      )}
                     </div>
                   </td>
                 </tr>
               ))}
             </tbody>
           </table>
+          {filtered.length === 0 && (
+            <div className="py-12 text-center text-slate-400 italic">No orders found for this category.</div>
+          )}
         </div>
       </div>
     </div>

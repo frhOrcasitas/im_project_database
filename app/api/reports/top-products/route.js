@@ -9,12 +9,11 @@ export async function GET() {
                 SUM(d.salesDetail_subtotal) as total_revenue
              FROM tbl_sales_details d
              JOIN tbl_product p ON d.productLine_ID = p.product_ID
-             GROUP BY d.productLine_ID
-             ORDER BY total_sold DESC`
+             GROUP BY d.productLine_ID, p.product_name
+             ORDER BY total_sold DESC
+             LIMIT 10`
         );
-
         return Response.json(rows);
-
     } catch(error) {
         return Response.json({ error: error.message }, { status: 500});
     }

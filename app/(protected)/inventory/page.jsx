@@ -1,83 +1,106 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 
-const inventoryData = [
-  { code: "PRD-001", name: "Product A", category: "Category 1", stock: 150, reorder: 20, unit: "pcs", cost: 200, price: 280, status: "in-stock" },
-  { code: "PRD-002", name: "Product B", category: "Category 1", stock: 8, reorder: 15, unit: "pcs", cost: 140, price: 180, status: "low-stock" },
-  { code: "PRD-003", name: "Product C", category: "Category 2", stock: 0, reorder: 10, unit: "pcs", cost: 260, price: 320, status: "out-of-stock" },
-  { code: "PRD-004", name: "Product D", category: "Category 2", stock: 45, reorder: 20, unit: "pcs", cost: 380, price: 450, status: "in-stock" },
-  { code: "PRD-005", name: "Product E", category: "Category 3", stock: 3, reorder: 10, unit: "pcs", cost: 70, price: 95, status: "low-stock" },
-  { code: "PRD-006", name: "Product F", category: "Category 1", stock: 200, reorder: 30, unit: "pcs", cost: 110, price: 150, status: "in-stock" },
-  { code: "PRD-007", name: "Product G", category: "Category 3", stock: 67, reorder: 25, unit: "pcs", cost: 310, price: 400, status: "in-stock" },
-];
-
-const statusBadge = (status) => {
-  if (status === "in-stock") return <span className="text-xs font-semibold bg-green-100 text-green-700 px-2 py-0.5 rounded-full">In Stock</span>;
-  if (status === "low-stock") return <span className="text-xs font-semibold bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full">Low Stock</span>;
-  return <span className="text-xs font-semibold bg-red-100 text-red-700 px-2 py-0.5 rounded-full">Out of Stock</span>;
+// ─── Status Badge Logic ──────────────────────────────────────────────────────
+const getStatus = (stock, reorder) => {
+  if (stock <= 0) return { label: "Out of Stock", cls: "bg-red-100 text-red-700" };
+  if (stock <= reorder) return { label: "Low Stock", cls: "bg-amber-100 text-amber-700" };
+  return { label: "In Stock", cls: "bg-green-100 text-green-700" };
 };
 
 export default function Inventory() {
+  const [products, setProducts] = useState([]);
+  const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
 
-  const filtered = inventoryData.filter((p) => {
-    const matchSearch = p.name.toLowerCase().includes(search.toLowerCase()) || p.code.toLowerCase().includes(search.toLowerCase());
-    const matchStatus = statusFilter === "all" || p.status === statusFilter;
+  // ─── Connection Logic ──────────────────────────────────────────────────────
+  const fetchInventory = async () => {
+    setLoading(true);
+    try {
+      const res = await fetch("/api/inventory"); // Ensure this matches your route
+      const data = await res.json();
+      setProducts(Array.isArray(data) ? data : []);
+    } catch (err) {
+      console.error("Failed to fetch inventory:", err);
+      setProducts([]);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => { fetchInventory(); }, []);
+
+  // ─── Derived Calculations ──────────────────────────────────────────────────
+  const filtered = products.filter((p) => {
+    const { label } = getStatus(p.product_stockQty, p.product_reorderPoint);
+    const matchSearch = 
+      p.product_name?.toLowerCase().includes(search.toLowerCase()) || 
+      p.product_code?.toLowerCase().includes(search.toLowerCase());
+    const matchStatus = statusFilter === "all" || label.replace(/\s+/g, '-').toLowerCase() === statusFilter;
     return matchSearch && matchStatus;
   });
 
-  const totalValue = inventoryData.reduce((s, p) => s + p.stock * p.cost, 0);
+  const stats = {
+    totalItems: products.length,
+    inStock: products.filter(p => p.product_stockQty > p.product_reorderPoint).length,
+    lowStock: products.filter(p => p.product_stockQty > 0 && p.product_stockQty <= p.product_reorderPoint).length,
+    outOfStock: products.filter(p => p.product_stockQty <= 0).length,
+    totalValue: products.reduce((sum, p) => {
+        // Number() converts strings to numbers and handles null/undefined as 0
+        const qty = Number(p.product_stockQty) || 0;
+        const cost = Number(p.product_costPrice) || 0;
+        return sum + (qty * cost);
+      }, 0)
+  };
 
   return (
-    <div>
-      <div className="flex flex-wrap items-center justify-between gap-3 mb-6">
+    <div className="flex flex-col gap-6">
+      {/* Header */}
+      <div className="flex flex-wrap items-center justify-between gap-3 shrink-0">
         <h1 className="text-2xl font-bold text-slate-800">Inventory Management</h1>
-        <div className="flex gap-2 flex-wrap">
-          <button className="bg-green-600 hover:bg-green-700 text-white text-sm font-medium px-4 py-2 rounded-lg transition-colors">
+        <div className="flex gap-2">
+          <button className="bg-green-600 hover:bg-green-700 text-white text-sm font-semibold px-4 py-2 rounded-lg transition-colors">
             + Add Product
           </button>
-          <button className="bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium px-4 py-2 rounded-lg transition-colors">
-            📥 Import Stock
-          </button>
-          <button className="bg-slate-200 hover:bg-slate-300 text-slate-700 text-sm font-medium px-4 py-2 rounded-lg transition-colors">
-            📤 Export Report
+          <button onClick={fetchInventory} className="bg-slate-100 hover:bg-slate-200 text-slate-600 text-sm font-semibold px-4 py-2 rounded-lg transition-colors">
+            🔄 Refresh
           </button>
         </div>
       </div>
 
-      {/* Stats */}
-      <div className="grid grid-cols-2 lg:grid-cols-5 gap-4 mb-6">
+      {/* Stats Cards */}
+      <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
         {[
-          { label: "Total Products", value: 156, color: "text-slate-800" },
-          { label: "In Stock", value: 128, color: "text-green-600" },
-          { label: "Low Stock", value: 23, color: "text-amber-500" },
-          { label: "Out of Stock", value: 5, color: "text-red-500" },
-          { label: "Total Value", value: `₱${(totalValue / 1000).toFixed(0)}K`, color: "text-blue-600" },
+          { label: "Total Products", val: stats.totalItems, color: "text-slate-800" },
+          { label: "In Stock", val: stats.inStock, color: "text-green-600" },
+          { label: "Low Stock", val: stats.lowStock, color: "text-amber-500" },
+          { label: "Out of Stock", val: stats.outOfStock, color: "text-red-500" },
+          { label: "Total Value", val: `₱${(stats.totalValue / 1000).toFixed(2)}`, color: "text-blue-600" },
         ].map((s) => (
-          <div key={s.label} className="bg-white rounded-xl shadow-sm p-4 text-center">
-            <div className="text-xs text-slate-500 uppercase tracking-wide mb-1">{s.label}</div>
-            <div className={`text-2xl font-bold ${s.color}`}>{s.value}</div>
+          <div key={s.label} className="bg-white rounded-xl shadow-sm p-4 border border-slate-100">
+            <div className="text-[10px] text-slate-400 uppercase font-bold tracking-widest mb-1">{s.label}</div>
+            <div className={`text-2xl font-bold ${s.color}`}>{loading ? "..." : s.val}</div>
           </div>
         ))}
       </div>
 
-      {/* Table */}
-      <div className="bg-white rounded-xl shadow-sm p-5">
-        <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
-          <div className="flex gap-2 flex-wrap">
+      {/* Main Table Section */}
+      <div className="bg-white rounded-2xl shadow-sm border border-slate-100 flex flex-col min-h-0 overflow-hidden">
+        <div className="p-4 border-b border-slate-50 flex flex-wrap gap-3 items-center justify-between bg-slate-50/50">
+          <div className="flex gap-2 flex-1">
             <input
               type="text"
-              placeholder="Search products..."
+              placeholder="Search code or name..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              className="border border-slate-300 rounded-lg px-3 py-2 text-sm w-64 focus:outline-none focus:ring-2 focus:ring-blue-400"
+              className="border border-slate-200 rounded-lg px-3 py-2 text-sm w-full max-w-xs focus:ring-2 focus:ring-blue-500 outline-none"
             />
             <select
               value={statusFilter}
               onChange={(e) => setStatusFilter(e.target.value)}
-              className="border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400"
+              className="border border-slate-200 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none bg-white"
             >
               <option value="all">All Status</option>
               <option value="in-stock">In Stock</option>
@@ -85,48 +108,63 @@ export default function Inventory() {
               <option value="out-of-stock">Out of Stock</option>
             </select>
           </div>
-          <button className="text-sm text-blue-600 hover:text-blue-800 font-medium">🔄 Refresh</button>
         </div>
 
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b border-slate-200">
-                {["Product Code", "Product Name", "Category", "Stock Qty", "Reorder Pt.", "Unit", "Cost Price", "Selling Price", "Status", "Actions"].map((h) => (
-                  <th key={h} className="text-left py-2 px-3 text-xs font-semibold text-slate-500 uppercase tracking-wide">
-                    {h}
-                  </th>
-                ))}
+        <div className="overflow-auto max-h-[60vh]">
+          <table className="w-full text-left border-collapse">
+            <thead className="sticky top-0 bg-white z-10 shadow-sm">
+              <tr className="text-[10px] font-bold text-slate-400 uppercase tracking-wider border-b border-slate-100">
+                <th className="px-6 py-4">Product</th>
+                <th className="px-4 py-4">Category</th>
+                <th className="px-4 py-4">Stock</th>
+                <th className="px-4 py-4">Reorder</th>
+                <th className="px-4 py-4">Unit</th>
+                <th className="px-4 py-4">Price</th>
+                <th className="px-4 py-4">Status</th>
+                <th className="px-6 py-4 text-right">Actions</th>
               </tr>
             </thead>
-            <tbody>
-              {filtered.map((p) => (
-                <tr key={p.code} className="border-b border-slate-50 hover:bg-slate-50 transition-colors">
-                  <td className="py-3 px-3 font-medium text-blue-600">{p.code}</td>
-                  <td className="py-3 px-3 font-medium text-slate-800">{p.name}</td>
-                  <td className="py-3 px-3 text-slate-600">{p.category}</td>
-                  <td className={`py-3 px-3 font-semibold ${p.stock === 0 ? "text-red-500" : p.stock <= p.reorder ? "text-amber-500" : "text-slate-700"}`}>
-                    {p.stock}
-                  </td>
-                  <td className="py-3 px-3 text-slate-500">{p.reorder}</td>
-                  <td className="py-3 px-3 text-slate-500">{p.unit}</td>
-                  <td className="py-3 px-3 text-slate-600">₱{p.cost.toLocaleString()}</td>
-                  <td className="py-3 px-3 font-medium text-slate-800">₱{p.price.toLocaleString()}</td>
-                  <td className="py-3 px-3">{statusBadge(p.status)}</td>
-                  <td className="py-3 px-3">
-                    <div className="flex gap-1">
-                      <button className="text-xs bg-blue-100 text-blue-700 hover:bg-blue-200 px-2 py-1 rounded transition-colors">Edit</button>
-                      <button className="text-xs bg-green-100 text-green-700 hover:bg-green-200 px-2 py-1 rounded transition-colors">Restock</button>
-                    </div>
-                  </td>
-                </tr>
-              ))}
+            <tbody className="divide-y divide-slate-50">
+              {loading ? (
+                <tr><td colSpan="8" className="py-10 text-center text-slate-400">Loading inventory...</td></tr>
+              ) : filtered.length === 0 ? (
+                <tr><td colSpan="8" className="py-10 text-center text-slate-400">No products found.</td></tr>
+              ) : (
+                filtered.map((p) => {
+                  const status = getStatus(p.product_stockQty, p.product_reorderPoint);
+                  return (
+                    <tr key={p.product_code} className="hover:bg-slate-50 transition-colors group">
+                      <td className="px-6 py-4">
+                        <div className="font-bold text-blue-600 text-xs mb-0.5">{p.product_code}</div>
+                        <div className="font-semibold text-slate-700">{p.product_name}</div>
+                      </td>
+                      <td className="px-4 py-4 text-slate-500 text-sm">{p.product_category}</td>
+                      <td className={`px-4 py-4 font-bold ${p.product_stockQty <= p.product_reorderPoint ? 'text-amber-600' : 'text-slate-700'}`}>
+                        {p.product_stockQty}
+                      </td>
+                      <td className="px-4 py-4 text-slate-400 text-sm">{p.product_reorderPoint}</td>
+                      <td className="px-4 py-4 text-slate-400 text-sm">{p.product_unit}</td>
+                      <td className="px-4 py-4">
+                        <div className="text-[10px] text-slate-400 font-bold uppercase">Selling</div>
+                        <div className="font-bold text-slate-700">₱{p.product_sellingPrice?.toLocaleString()}</div>
+                      </td>
+                      <td className="px-4 py-4">
+                        <span className={`text-[10px] font-bold uppercase px-2 py-1 rounded-md ${status.cls}`}>
+                          {status.label}
+                        </span>
+                      </td>
+                      <td className="px-6 py-4 text-right">
+                        <div className="flex justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                          <button className="p-1.5 hover:bg-blue-50 text-blue-600 rounded-md">Edit</button>
+                          <button className="p-1.5 hover:bg-green-50 text-green-600 rounded-md">Stock</button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })
+              )}
             </tbody>
           </table>
-        </div>
-
-        <div className="mt-4 text-xs text-slate-400 text-right">
-          Showing {filtered.length} of {inventoryData.length} products
         </div>
       </div>
     </div>

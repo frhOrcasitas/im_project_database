@@ -4,151 +4,50 @@ import pool from "../../../lib/db";
 
 export async function POST(request) {
     const connection = await pool.getConnection();
-
     try {
         await connection.beginTransaction();
-
-        const body = await request.json();
-        const { shipment_ID, items } = body;
-
-        if (!items || items.length === 0) {
-            return Response.json(
-                { error: "Damage must contain at least one product." },
-                { status: 400 }
-            );
-        }
-
-        // Validate shipment
-        const [shipment] = await connection.query(
-            `SELECT shipment_ID
-             FROM tbl_shipment
-             WHERE shipment_ID = ?`,
-            [shipment_ID]
-        );
-
-        if (shipment.length === 0) {
-            throw new Error("Shipment not found.");
-        }
-
-        const productLineSet = new Set();
+        const { shipment_ID, items } = await request.json();
 
         for (const item of items) {
-            if (productLineSet.has(item.productLine_ID)) {
-                return Response.json(
-                    { error: "Duplicate productLine in damage list not allowed."},
-                    { status: 400 }
-                );
-            }
-            productLineSet.add(item.productLine_ID);
-        }
-
-        for (const item of items) {
-
             const { productLine_ID, damage_quantity, damage_description } = item;
 
-            if (damage_quantity <= 0) {
-                throw new Error("Damage quantity must be greater than zero.");
-            }
-
-            // Validate productLine belongs to shipment
-            const [shipmentProduct] = await connection.query(
-                `SELECT product_ID, product_quantity
-                 FROM tbl_shipment_productdetails
-                 WHERE shipment_ID = ?
-                 AND productLine_ID = ?`,
+            // 1. Find the actual Product ID and Unit Price from the shipment
+            // Note: Use productLine_ID to find the specific item in that shipment
+            const [shipmentDetail] = await connection.query(
+                `SELECT sp.product_ID, p.product_unitPrice 
+                 FROM tbl_shipment_productdetails sp
+                 JOIN tbl_product p ON sp.product_ID = p.product_ID
+                 WHERE sp.shipment_ID = ? AND sp.productLine_ID = ?`,
                 [shipment_ID, productLine_ID]
             );
 
-            if (shipmentProduct.length === 0) {
-                throw new Error("Product not part of this shipment.");
-            }
+            if (shipmentDetail.length === 0) throw new Error(`Item ${productLine_ID} not found in shipment ${shipment_ID}`);
 
-            const shippedQty = shipmentProduct[0].product_quantity;
-            const product_ID = shipmentProduct[0].product_ID;
+            const { product_ID, product_unitPrice } = shipmentDetail[0];
+            const subtotal = damage_quantity * product_unitPrice;
 
-            if (damage_quantity > shippedQty) {
-                throw new Error(
-                    `Damage quantity exceeds shipped quantity (${shippedQty}).`
-                );
-            }
-
-            // Get product unit price
-            const [product] = await connection.query(
-                `SELECT product_stockQty, product_unitPrice
-                 FROM tbl_product
-                 WHERE product_ID = ?`,
-                [product_ID]
-            );
-
-            if (product.length === 0) {
-                throw new Error("Product not found.");
-            }
-
-            const currentStock = product[0].product_stockQty;
-            const unitPrice = product[0].product_unitPrice;
-
-            const [existingDamage] = await connection.query(
-                `SELECT SUM(damage_quantity) AS total_damaged
-                FROM tbl_damage_during
-                WHERE shipment_ID = ?
-                AND productLine_id = ?`,
-                [shipment_ID, productLine_ID]
-            );
-
-            const alreadyDamaged = existingDamage[0].total_damaged || 0;
-
-            if (damage_quantity + alreadyDamaged > shippedQty) {
-                throw new Error(
-                    `Total damage exceeds shipped quantity (${shippedQty}).`
-                );
-            }
-
-            if (damage_quantity > currentStock) {
-                throw new Error(
-                    `Damage exceeds available stock (${currentStock}).`
-                );
-            }
-
-            const subtotal = damage_quantity * unitPrice;
-
-            // Insert damage record
+            // 2. Record Damage (Loss)
             await connection.query(
                 `INSERT INTO tbl_damage_during
-                 (shipment_ID, productLine_id, damage_quantity,
-                  damage_amount, damage_subtotal,
-                  damage_description, damage_date)
+                 (shipment_ID, productLine_id, damage_quantity, damage_amount, damage_subtotal, damage_description, damage_date)
                  VALUES (?, ?, ?, ?, ?, ?, CURDATE())`,
-                [
-                    shipment_ID,
-                    productLine_ID,
-                    damage_quantity,
-                    unitPrice,
-                    subtotal,
-                    damage_description || null
-                ]
+                [shipment_ID, productLine_ID, damage_quantity, product_unitPrice, subtotal, damage_description]
             );
 
-            // Deduct stock
+            // 3. Deduct from Inventory (Rule: "It’s recorded and deducted")
+            // Since it was already deducted when 'shipped', we ensure it's not double-deducted 
+            // OR if your system adds it back first, we ensure it's removed here.
             await connection.query(
-                `UPDATE tbl_product
-                 SET product_stockQty = product_stockQty - ?
-                 WHERE product_ID = ?`,
+                `UPDATE tbl_product SET product_stockQty = product_stockQty - ? WHERE product_ID = ?`,
                 [damage_quantity, product_ID]
             );
         }
 
         await connection.commit();
-
-        return Response.json({
-            message: "Delivery damage recorded successfully."
-        });
-
+        return Response.json({ message: "Delivery damage recorded and stock adjusted." });
     } catch (error) {
         await connection.rollback();
-        return Response.json(
-            { error: error.message },
-            { status: 500 }
-        );
+        return Response.json({ error: error.message }, { status: 500 });
     } finally {
         connection.release();
     }

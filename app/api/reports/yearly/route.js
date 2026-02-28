@@ -5,15 +5,16 @@ export async function GET() {
         const [rows] = await pool.query(
             `SELECT 
                 YEAR(sales_createdAt) as year, 
-                MONTH(sales_createdAt) as month, 
                 COUNT(*) as total_transactions, 
-                SUM(sales_totalAmount) as total_sales
+                SUM(sales_totalAmount) as total_sales,
+                SUM(sales_Balance) as total_outstanding_balance
              FROM tbl_sales
-             GROUP BY YEAR(sales_createdAt), MONTH(sales_createdAt)
-             ORDER BY year DESC, month DESC`
+             GROUP BY YEAR(sales_createdAt)
+             ORDER BY year DESC`
         );
+
         return Response.json(rows);
     } catch (error) {
-        return Response.json({error: error.message}, { status: 500});
+        return Response.json({ error: error.message }, { status: 500 });
     }
 }

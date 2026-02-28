@@ -21,31 +21,25 @@ export async function POST(request) {
     const connection = await pool.getConnection();
     try {
         await connection.beginTransaction();
-        
-        const body = await request.json();
-        const { client_name, client_contactNumber, client_email, 
-                client_address, TIN_Code, contactPerson } = body;
+        const { client_name, client_contactNumber, client_email, client_address, TIN_Code, contactPerson } = await request.json();
 
-        // 1. Insert contact person first
+        // 1. Create the Contact Person in tbl_customer first
         const [personResult] = await connection.query(
             `INSERT INTO tbl_customer (contactPerson) VALUES (?)`,
             [contactPerson]
         );
-        const client_contactPersonID = personResult.insertId;
+        const contactPersonID = personResult.insertId;
 
-        // 2. Then insert client
+        // 2. Create the Client (Rule #6: Balance monitoring starts at 0)
         await connection.query(
-            `INSERT INTO tbl_client 
-             (client_name, client_contactNumber, client_email, client_address, 
-              client_contactPersonID, TIN_Code, client_outstandingbalance) 
+            `INSERT INTO tbl_client (client_name, client_contactNumber, client_email, client_address, 
+             client_contactPersonID, TIN_Code, client_outstandingbalance) 
              VALUES (?, ?, ?, ?, ?, ?, 0)`,
-            [client_name, client_contactNumber, client_email, 
-             client_address, client_contactPersonID, TIN_Code || null]
+            [client_name, client_contactNumber, client_email, client_address, contactPersonID, TIN_Code || null]
         );
 
         await connection.commit();
-        return Response.json({ message: "Client created successfully." });
-
+        return Response.json({ message: "Client and Contact Person successfully linked." });
     } catch (error) {
         await connection.rollback();
         return Response.json({ error: error.message }, { status: 500 });

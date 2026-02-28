@@ -1,105 +1,109 @@
 import pool from "../../../lib/db";
 
 export async function GET(request, { params }) {
-    try {
-        const { id } = await params;
+  try {
+    const { id } = await params;
 
-        const [sale] = await pool.query (
-            `SELECT 
-                s.sales_ID,
-                s.sales_totalAmount,
-                s.sales_status,
-                s.sales_paymentStatus,
-                s.createdAt,
-                c.client_name,
-                e.employee_name
-             FROM tbl_sales s
-             JOIN tbl_client c ON s.client_ID = c.client_ID
-             JOIN tbl_employee e ON s.employee_ID = e.employee_ID
-             WHERE s.sales_ID = ?`,
-            [id]
-        );
+    // 1. Fetch Sales Header (Joining with tbl_client)
+    const [saleRows] = await pool.query(
+      `SELECT s.*, c.client_name 
+       FROM tbl_sales s 
+       JOIN tbl_client c ON s.client_ID = c.client_ID 
+       WHERE s.sales_ID = ?`, [id]
+    );
 
-        if (sale.length === 0) {
-            return Response.json(
-                { error: "Sale not found" },
-                { status: 404 }
-            );
-        }
+    // 2. Fetch Sales Details (Items)
+    // Note: We'd ideally join with a product table here to get the name
+    const [itemRows] = await pool.query(
+      `SELECT sd.* FROM tbl_sales_details sd 
+       WHERE sd.sales_ID = ?`, [id]
+    );
 
-        const [saleStatus] = await pool.query(
-            `SELECT sales_status FROM tbl_sales WHERE sales_ID = ?`,
-            [id]
-        );
+    // 3. Fetch Payment History from tbl_payment_details
+    const [paymentRows] = await pool.query(
+      `SELECT * FROM tbl_payment_details 
+       WHERE sales_ID = ? 
+       ORDER BY payment_paidDate DESC`, [id]
+    );
 
-        const [details] = await pool.query(
-            `SELECT 
-                d.productLine_ID,
-                p.product_name,
-                d.salesDetail_qty,
-                d.salesDetail_unitPriceSold,
-                d.salesDetail_subtotal
-             FROM tbl_sales_details d
-             JOIN tbl_product p ON d.productLine_ID = p.product_ID
-             WHERE d.sales_ID = ?`,
-            [id]
-        );
+    if (saleRows.length === 0) return Response.json({ error: "Sale not found" }, { status: 404 });
 
-
-        const [payment] = await pool.query(
-            `SELECT
-                payment_type,
-                payment_amount,
-                payment_paidDate
-            FROM tbl_payment_details
-            WHERE sales_ID = ?`,
-            [id]
-        );
-
-        return Response.json({
-            sale:sale[0],
-            details,
-            payment
-        });
-
-    } catch (error) {
-        return Response.json({ error: error.message }, {status: 500});
-    }
+    return Response.json({
+      sale: saleRows[0],
+      items: itemRows,
+      payments: paymentRows
+    });
+  } catch (error) {
+    return Response.json({ error: error.message }, { status: 500 });
+  }
 }
 
 export async function PATCH(request, { params }) {
     const connection = await pool.getConnection();
+
     try {
         await connection.beginTransaction();
 
-        const { id } = await params; // FIXED: Await params
+        const { id } = params;
         const { status } = await request.json();
 
         const allowedStatuses = ["Completed", "Cancelled", "Pending"];
+
         if (!allowedStatuses.includes(status)) {
-            return Response.json({ error: "Invalid status" }, { status: 400 });
+            return Response.json(
+                { error: "Invalid status value." },
+                { status: 400 }
+            );
         }
 
-        // Check if already cancelled to prevent double-restoring stock
-        const [current] = await connection.query("SELECT sales_status FROM tbl_sales WHERE sales_ID = ?", [id]);
-        if (current.length > 0 && current[0].sales_status !== "Cancelled" && status === "Cancelled") {
-            const [details] = await connection.query(
-                `SELECT productLine_ID, salesDetail_qty FROM tbl_sales_details WHERE sales_ID = ?`, [id]
+        // If cancelling, restore stock
+        if (status === "Cancelled") {
+
+            const [currentSale] = await connection.query(
+                `SELECT sales_status FROM tbl_sales WHERE sales_ID = ?`,
+                [id]
             );
+
+            if (currentSale.length === 0) {
+                throw new Error("Sale not found.");
+            }
+
+            if (currentSale[0].sales_status === "Cancelled") {
+                throw new Error("Sale is already cancelled.");
+            }
+
+            const [details] = await connection.query(
+                `SELECT productLine_ID, salesDetail_qty
+                 FROM tbl_sales_details
+                 WHERE sales_ID = ?`,
+                [id]
+            );
+
             for (const item of details) {
                 await connection.query(
-                    `UPDATE tbl_product SET product_stockQty = product_stockQty + ? WHERE product_ID = ?`,
+                    `UPDATE tbl_product
+                     SET product_stockQty = product_stockQty + ?
+                     WHERE product_ID = ?`,
                     [item.salesDetail_qty, item.productLine_ID]
                 );
             }
         }
 
-        await connection.query("UPDATE tbl_sales SET sales_status = ? WHERE sales_ID = ?", [status, id]);
+        await connection.query(
+            `UPDATE tbl_sales
+             SET sales_status = ?
+             WHERE sales_ID = ?`,
+            [status, id]
+        );
+
         await connection.commit();
-        return Response.json({ message: "Status updated" });
+
+        return Response.json({ message: "Sale status updated." });
+
     } catch (error) {
         await connection.rollback();
         return Response.json({ error: error.message }, { status: 500 });
+
     } finally {
         connection.release();
     }

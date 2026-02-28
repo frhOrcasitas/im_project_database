@@ -8,7 +8,7 @@ export async function POST(request, { params }) {
     try {
         await connection.beginTransaction();
 
-        // Header: tbl_unsold_products (matches your schema)
+        // 1. Create the Unsold Header
         await connection.query(
             `INSERT INTO tbl_unsold_products (shipment_ID, manager_id, approved_date, description_status) 
              VALUES (?, ?, CURDATE(), ?)`,
@@ -16,8 +16,9 @@ export async function POST(request, { params }) {
         );
 
         for (const item of items) {
-            // Find the original price using productLine_ID from your tbl_sales_details schema
-            const [details] = await connection.query(
+            // 2. Fetch the SOLD price to ensure we deduct the correct amount from their debt
+            // Prices change over time (your rule #1), so we look at tbl_sales_details
+            const [soldInfo] = await connection.query(
                 `SELECT sd.salesDetail_unitPriceSold, s.sales_ID, s.client_ID 
                  FROM tbl_sales_details sd
                  JOIN tbl_sales s ON sd.sales_ID = s.sales_ID
@@ -26,38 +27,43 @@ export async function POST(request, { params }) {
                 [id, item.productLine_ID]
             );
 
-            if (details.length > 0) {
-                const { salesDetail_unitPriceSold, sales_ID, client_ID } = details[0];
-                const subtotal = salesDetail_unitPriceSold * item.product_quantity;
+            if (soldInfo.length > 0) {
+                const { salesDetail_unitPriceSold, sales_ID, client_ID } = soldInfo[0];
+                const refundValue = salesDetail_unitPriceSold * item.product_quantity;
 
-                // Detail: tbl_unsold_products_details
+                // 3. Log details
                 await connection.query(
                     `INSERT INTO tbl_unsold_products_details (shipment_ID, product_id, product_quantity, product_subtotal) 
                      VALUES (?, ?, ?, ?)`,
-                    [id, item.product_id, item.product_quantity, subtotal]
+                    [id, item.product_id, item.product_quantity, refundValue]
                 );
 
-                // Update Stock (Assume tbl_product.product_ID)
+                // 4. Return to Inventory (Rule: "It’s returned and back to the inventory")
                 await connection.query(
                     "UPDATE tbl_product SET product_stockQty = product_stockQty + ? WHERE product_ID = ?",
                     [item.product_quantity, item.product_id]
                 );
 
-                // Reduce balances so the company doesn't claim money for returned goods
+                // 5. Adjust Sales Balance (Rule: "Closely monitor balance")
+                // We reduce the total amount and the remaining balance
                 await connection.query(
-                    "UPDATE tbl_sales SET sales_totalAmount = sales_totalAmount - ?, sales_Balance = sales_Balance - ? WHERE sales_ID = ?",
-                    [subtotal, subtotal, sales_ID]
+                    `UPDATE tbl_sales 
+                     SET sales_totalAmount = sales_totalAmount - ?, 
+                         sales_Balance = sales_Balance - ? 
+                     WHERE sales_ID = ?`,
+                    [refundValue, refundValue, sales_ID]
                 );
 
+                // 6. Adjust Client Outstanding Debt
                 await connection.query(
                     "UPDATE tbl_client SET client_outstandingbalance = client_outstandingbalance - ? WHERE client_ID = ?",
-                    [subtotal, client_ID]
+                    [refundValue, client_ID]
                 );
             }
         }
 
         await connection.commit();
-        return Response.json({ message: "Unsold items logged and balances adjusted" });
+        return Response.json({ message: "Unsold items processed. Inventory and Client balance updated." });
     } catch (error) {
         await connection.rollback();
         return Response.json({ error: error.message }, { status: 500 });

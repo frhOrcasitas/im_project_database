@@ -46,15 +46,6 @@ export default function Layout({ children }) {
           </span>
         </div>
         <div className="flex items-center gap-4 text-sm">
-          <button className="relative text-slate-300 hover:text-white transition-colors">
-            🔔
-            <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs rounded-full w-4 h-4 flex items-center justify-center">
-              3
-            </span>
-          </button>
-          <Link href="/settings" className="text-slate-300 hover:text-white transition-colors">
-            ⚙️
-          </Link>
           <div className="flex items-center gap-2 bg-slate-700 rounded-full px-3 py-1">
             <span className="w-7 h-7 rounded-full bg-blue-500 flex items-center justify-center text-xs font-bold">
               {user.name.charAt(0)}
@@ -64,7 +55,7 @@ export default function Layout({ children }) {
               {user.role}
             </span>
           </div>
-          <Link href="/login" className="text-slate-400 hover:text-red-400 transition-colors text-xs">
+          <Link href="/" className="text-slate-400 hover:text-red-400 transition-colors text-xs">
             Logout
           </Link>
         </div>

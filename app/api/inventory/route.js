@@ -2,108 +2,62 @@ import pool from "../../lib/db";
 
 export async function POST(request) {
     const connection = await pool.getConnection();
-
     try {
         await connection.beginTransaction();
+        const { manager_ID, items, adjustStock } = await request.json();
 
-        const body = await request.json();
-        const { manager_ID,  items, adjustStock } = body;
-
-        if (!items || items.length === 0) {
-            return Response.json(
-                { error: "Inventory must contain at least one product."},
-                { status: 400 }
-            );
-        }
-
-        const [manager] = await connection.query(
-            `SELECT manager_ID FROM tbl_manager WHERE manager_ID = ?`,
-            [manager_ID]
-        );
-
-        if (manager.length === 0) {
-            throw new Error("Manager not found.");
-        }
-
-        // Insert inventory header
+        // 1. Header: Capture the audit timestamp and the person responsible
         const [inventoryResult] = await connection.query(
-            `INSERT INTO tbl_inventory
-             (inventory_date, manager_ID)
-             VALUES (CURDATE(), ?)`,
+            `INSERT INTO tbl_inventory (inventory_date, manager_ID, inventory_total) 
+             VALUES (CURDATE(), ?, 0)`,
             [manager_ID]
         );
-
         const inventory_ID = inventoryResult.insertId;
 
         let totalInventoryValue = 0;
 
         for (const item of items) {
-            const { product_ID, actual_quantity } = item;
-
-            if (actual_quantity < 0) {
-                throw new Error("Quantity cannot be negative.");
-            }
-
-            // Get product
+            // 2. Fetch current unit price (Rule #2: Prices change, so we snapshot the cost now)
             const [product] = await connection.query(
-                `SELECT product_stockQty, product_unitPrice
-                 FROM tbl_product
-                 WHERE product_ID = ?`,
-                [product_ID]
+                `SELECT product_unitPrice FROM tbl_product WHERE product_ID = ?`,
+                [item.product_ID]
             );
 
-            if (product.length === 0) {
-                throw new Error("Product not found.");
-            }
+            if (product.length === 0) throw new Error(`Product ${item.product_ID} not found.`);
 
-            const currentStock = product[0].product_stockQty;
             const unitPrice = product[0].product_unitPrice;
-
-            const subtotal = actual_quantity * unitPrice;
-
+            const subtotal = item.actual_quantity * unitPrice;
             totalInventoryValue += subtotal;
 
-            // Insert Inventory Detail
+            // 3. Insert Details: Record exactly what was counted
             await connection.query(
-                `INSERT INTO tbl_inventory_details
+                `INSERT INTO tbl_inventory_details 
                  (inventory_ID, product_ID, quantity, inventory_cost, inventory_subtotal)
                  VALUES (?, ?, ?, ?, ?)`,
-                [inventory_ID, product_ID, actual_quantity, unitPrice, subtotal]
+                [inventory_ID, item.product_ID, item.actual_quantity, unitPrice, subtotal]
             );
 
-            // Adjust stock if allowed
+            // 4. Synchronization (Rule #4: Returned/Unsold items go back to inventory)
+            // This 'adjustStock' allows the office clerk to fix discrepancies
             if (adjustStock === true) {
                 await connection.query(
-                    `UPDATE tbl_product
-                     SET product_stockQty = ?
-                     WHERE product_ID = ?`,
-                    [actual_quantity, product_ID]
+                    `UPDATE tbl_product SET product_stockQty = ? WHERE product_ID = ?`,
+                    [item.actual_quantity, item.product_ID]
                 );
             }
         }
 
-        // Update total
+        // Update the header with the total calculated value of the warehouse
         await connection.query(
-            `UPDATE tbl_inventory
-             SET inventory_total = ?
-             WHERE inventory_ID = ?`,
+            `UPDATE tbl_inventory SET inventory_total = ? WHERE inventory_ID = ?`, 
             [totalInventoryValue, inventory_ID]
         );
-        
+
         await connection.commit();
-
-        return Response.json({
-            message: "Inventory recorded successfully.",
-            inventory_ID
-        });
-
+        return Response.json({ message: "Inventory count finalized.", inventory_ID });
     } catch (error) {
         await connection.rollback();
-        return Response.json(
-            { error: error.message },
-            { status: 500 }
-        );
-
+        return Response.json({ error: error.message }, { status: 500 });
     } finally {
         connection.release();
     }

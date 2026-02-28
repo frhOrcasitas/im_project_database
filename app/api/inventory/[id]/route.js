@@ -1,46 +1,60 @@
 import pool from "../../../lib/db";
 
-export async function GET(request, { params }) {
+export async function POST(request) {
+    const connection = await pool.getConnection();
     try {
-        const {id} = params;
+        await connection.beginTransaction();
+        const { manager_ID, items, adjustStock } = await request.json();
 
-        const [inventory] = await pool.query(
-            `SELECT *
-             FROM tbl_inventory
-             WHERE inventory_ID = ?`,
-            [id]
+        if (!items?.length) return Response.json({ error: "No items provided." }, { status: 400 });
+
+        // 1. Header
+        const [inventoryResult] = await connection.query(
+            `INSERT INTO tbl_inventory (inventory_date, manager_ID, inventory_total) VALUES (CURDATE(), ?, 0)`,
+            [manager_ID]
         );
+        const inventory_ID = inventoryResult.insertId;
 
-        if (inventory.length === 0) {
-            return Response.json(
-                { error: "Inventory not found. "},
-                { status: 404 }
+        let totalInventoryValue = 0;
+
+        for (const item of items) {
+            // 2. Get current unit price to record the value of stock at this moment
+            const [product] = await connection.query(
+                `SELECT product_unitPrice FROM tbl_product WHERE product_ID = ?`,
+                [item.product_ID]
             );
+
+            if (product.length === 0) throw new Error(`Product ${item.product_ID} not found.`);
+
+            const unitPrice = product[0].product_unitPrice;
+            const subtotal = item.actual_quantity * unitPrice;
+            totalInventoryValue += subtotal;
+
+            // 3. Record Snapshot
+            await connection.query(
+                `INSERT INTO tbl_inventory_details (inventory_ID, product_ID, quantity, inventory_cost, inventory_subtotal)
+                 VALUES (?, ?, ?, ?, ?)`,
+                [inventory_ID, item.product_ID, item.actual_quantity, unitPrice, subtotal]
+            );
+
+            // 4. Force Adjustment (Overrides inventory with actual count)
+            if (adjustStock === true) {
+                await connection.query(
+                    `UPDATE tbl_product SET product_stockQty = ? WHERE product_ID = ?`,
+                    [item.actual_quantity, item.product_ID]
+                );
+            }
         }
 
-        const [details] = await pool.query(
-            `SELECT
-                d.product_ID,
-                p.product_name,
-                d.quantity,
-                d.inventory_cost,
-                d.inventory_subtotal
-             FROM tbl_inventory_details d
-             JOIN tbl_product p
-                ON d.product_ID = p.product_ID
-             WHERE d.inventory_ID = ?`,
-            [id]
-        );
+        // 5. Update Total Value
+        await connection.query(`UPDATE tbl_inventory SET inventory_total = ? WHERE inventory_ID = ?`, [totalInventoryValue, inventory_ID]);
 
-        return Response.json({
-            inventory: inventory[0],
-            products: details
-        });
-
+        await connection.commit();
+        return Response.json({ message: "Inventory audit recorded.", inventory_ID });
     } catch (error) {
-        return Response.json(
-            { error: error.message },
-            { status: 500}
-        );
+        await connection.rollback();
+        return Response.json({ error: error.message }, { status: 500 });
+    } finally {
+        connection.release();
     }
 }
