@@ -44,7 +44,7 @@ export async function PATCH(request, { params }) {
     try {
         await connection.beginTransaction();
 
-        const { id } = params;
+        const { id } = await params;
         const { status } = await request.json();
 
         const allowedStatuses = ["Completed", "Cancelled", "Pending"];

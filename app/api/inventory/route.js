@@ -1,66 +1,21 @@
 import pool from "../../lib/db";
 
-export async function POST(request) {
-    const connection = await pool.getConnection();
-    try {
-        await connection.beginTransaction();
-        const { manager_ID, items, adjustStock } = await request.json();
+export async function POST(req) {
+  try {
+    const body = await req.json();
+    const { name, stock, unit, reorder, price, description } = body;
 
-        // 1. Header: Capture the audit timestamp and the person responsible
-        const [inventoryResult] = await connection.query(
-            `INSERT INTO tbl_inventory (inventory_date, manager_ID, inventory_total) 
-             VALUES (CURDATE(), ?, 0)`,
-            [manager_ID]
-        );
-        const inventory_ID = inventoryResult.insertId;
+    const [result] = await pool.query(
+      `INSERT INTO tbl_product 
+      (product_name, product_stockQty, product_unitOfMeasure, product_reorderLevel, product_unitPrice, product_description) 
+      VALUES (?, ?, ?, ?, ?, ?)`,
+      [name, stock, unit, reorder, price, description]
+    );
 
-        let totalInventoryValue = 0;
-
-        for (const item of items) {
-            // 2. Fetch current unit price (Rule #2: Prices change, so we snapshot the cost now)
-            const [product] = await connection.query(
-                `SELECT product_unitPrice FROM tbl_product WHERE product_ID = ?`,
-                [item.product_ID]
-            );
-
-            if (product.length === 0) throw new Error(`Product ${item.product_ID} not found.`);
-
-            const unitPrice = product[0].product_unitPrice;
-            const subtotal = item.actual_quantity * unitPrice;
-            totalInventoryValue += subtotal;
-
-            // 3. Insert Details: Record exactly what was counted
-            await connection.query(
-                `INSERT INTO tbl_inventory_details 
-                 (inventory_ID, product_ID, quantity, inventory_cost, inventory_subtotal)
-                 VALUES (?, ?, ?, ?, ?)`,
-                [inventory_ID, item.product_ID, item.actual_quantity, unitPrice, subtotal]
-            );
-
-            // 4. Synchronization (Rule #4: Returned/Unsold items go back to inventory)
-            // This 'adjustStock' allows the office clerk to fix discrepancies
-            if (adjustStock === true) {
-                await connection.query(
-                    `UPDATE tbl_product SET product_stockQty = ? WHERE product_ID = ?`,
-                    [item.actual_quantity, item.product_ID]
-                );
-            }
-        }
-
-        // Update the header with the total calculated value of the warehouse
-        await connection.query(
-            `UPDATE tbl_inventory SET inventory_total = ? WHERE inventory_ID = ?`, 
-            [totalInventoryValue, inventory_ID]
-        );
-
-        await connection.commit();
-        return Response.json({ message: "Inventory count finalized.", inventory_ID });
-    } catch (error) {
-        await connection.rollback();
-        return Response.json({ error: error.message }, { status: 500 });
-    } finally {
-        connection.release();
-    }
+    return Response.json({ message: "Product added!", id: result.insertId });
+  } catch (error) {
+    return Response.json({ error: error.message }, { status: 500 });
+  }
 }
 
 // GET - Lists all inventories
@@ -68,15 +23,17 @@ export async function GET() {
     try {
         const [rows] = await pool.query(
             `SELECT
-                i.inventory_ID,
-                i.inventory_date,
-                i.inventory_total,
-                m.manager_ID,
-                e.employee_name AS manager_name
-            FROM tbl_inventory i
-            JOIN tbl_manager m ON i.manager_ID = m.manager_ID
-            JOIN tbl_employee e ON m.employee_ID = e.employee_ID
-            ORDER BY i.inventory_date DESC`
+                p.product_ID,
+                p.product_name,
+                p.product_stockQty,
+                p.product_unitOfMeasure AS product_unit,
+                p.product_reorderLevel AS product_reorderPoint,
+                p.product_unitPrice AS product_sellingPrice,
+                p.product_description,
+                (SELECT inventory_cost FROM tbl_inventory_details
+                WHERE product_ID = p.product_ID
+                ORDER BY inventory_ID DESC LIMIT 1) AS product_costPrice
+            FROM tbl_product p`
         );
 
         return Response.json(rows);
@@ -87,4 +44,22 @@ export async function GET() {
             { status: 500 }
         );
     }
+}
+
+export async function PUT(req) {
+  try {
+    const body = await req.json();
+    const { product_ID, product_name, product_sellingPrice, product_reorderPoint, product_unit } = body;
+
+    await pool.query(
+      `UPDATE tbl_product 
+       SET product_name = ?, product_unitPrice = ?, product_reorderLevel = ?, product_unitOfMeasure = ? 
+       WHERE product_ID = ?`,
+      [product_name, product_sellingPrice, product_reorderPoint, product_unit, product_ID]
+    );
+
+    return Response.json({ message: "Product updated successfully" });
+  } catch (error) {
+    return Response.json({ error: error.message }, { status: 500 });
+  }
 }
