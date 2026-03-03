@@ -39,22 +39,42 @@ export default function Orders() {
   const [orderDetails, setOrderDetails] = useState([]);
   const [isViewModalOpen, setIsViewModalOpen] = useState(false);
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
+  const [clients, setClients] = useState([]);
+  const [products, setProducts] = useState([]);
+  const [formData, setFormData] = useState({ client_ID: "", amountPaid: 0 });
+  const [selectedItems, setSelectedItems] = useState([{ product_ID: "", qty: 1, price: 0 }]);
 
   // 1. Fetch Sales from Backend
-  useEffect(() => {
-    async function fetchSales() {
-      try {
-        const res = await fetch("/api/sales");
-        const data = await res.json();
-        setSales(data);
-      } catch (error) {
-        console.error("Failed to fetch orders:", error);
-      } finally {
-        setLoading(false);
+    useEffect(() => {
+      async function initData() {
+        setLoading(true);
+        try {
+          const [salesRes, clientRes, productRes] = await Promise.all([
+            fetch("/api/sales"),
+            fetch("/api/client"), 
+            fetch("/api/products"),
+          ]);
+          
+          if (!salesRes.ok || !clientRes.ok || !productRes.ok) throw new Error("API failure");
+
+          const salesData = await salesRes.json();
+          const clientData = await clientRes.json();
+          const productData = await productRes.json();
+
+          // Ensure we are setting arrays. 
+          // If your DB returns [rows, fields], we take [0].
+          setSales(Array.isArray(salesData) ? salesData : salesData.data || []);
+          setClients(Array.isArray(clientData) ? clientData : clientData.data || []);
+          setProducts(Array.isArray(productData) ? productData : productData.data || []);
+          
+        } catch (error) {
+          console.error("Fetch error:", error);
+        } finally {
+          setLoading(false);
+        }
       }
-    }
-    fetchSales();
-  }, []);
+      initData();
+    }, []);
 
   // 2. Filter Logic
   const filtered = sales.filter(
@@ -282,35 +302,125 @@ export default function Orders() {
       )}
 
       {isCreateModalOpen && (
-      <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-        <div className="bg-white rounded-2xl w-full max-w-lg shadow-xl p-6">
-          <div className="flex justify-between items-center mb-6">
-            <h2 className="text-xl font-bold text-slate-800">Create New Sales Order</h2>
-            <button onClick={() => setIsCreateModalOpen(false)} className="text-slate-400 text-2xl">&times;</button>
-          </div>
-          
-          {/* This is where your partner will build the form */}
-          <div className="space-y-4">
-            <p className="text-sm text-slate-500 italic">Form fields for Client, Items, and Totals go here.</p>
-            
-            <div className="flex gap-3 mt-8">
-              <button 
-                onClick={() => setIsCreateModalOpen(false)}
-                className="flex-1 px-4 py-2 border border-slate-200 rounded-lg text-slate-600 font-medium"
-              >
-                Cancel
-              </button>
-              <button 
-                className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg font-medium"
-                onClick={() => alert("Backend is ready! Integration needed.")}
-              >
-                Create Order
-              </button>
+          <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+            <div className="bg-white rounded-2xl w-full max-w-2xl shadow-xl p-6 max-h-[90vh] overflow-y-auto">
+              <div className="flex justify-between items-center mb-6">
+                <h2 className="text-xl font-bold text-slate-800">Create New Sales Order</h2>
+                <button onClick={() => setIsCreateModalOpen(false)} className="text-slate-400 text-2xl">&times;</button>
+              </div>
+
+              <div className="space-y-4">
+                {/* Client Selector */}
+                <div>
+                  <label className="text-[10px] font-bold uppercase text-slate-400 tracking-widest">Select Customer</label>
+                  <select 
+                    className="w-full mt-1 p-2 border text-black border-slate-200 rounded-lg text-sm bg-slate-50"
+                    value={formData.client_ID} 
+                    onChange={(e) => setFormData({ ...formData, client_ID: e.target.value })}
+                  >
+                    <option value="">-- Choose a Client --</option>
+                    {clients?.length > 0 ? (
+                      clients.map(c => (
+                        <option key={c.client_ID} value={c.client_ID}>
+                          {c.client_name}
+                        </option>
+                      ))
+                    ) : (
+                      <option disabled>No clients found in database</option>
+                    )}
+                  </select>
+                </div>
+
+                {/* Items Table */}
+                <div className="border-t border-slate-100 pt-4">
+                  <div className="flex justify-between items-center mb-2">
+                    <label className="text-[10px] font-bold uppercase text-slate-400 tracking-widest">Order Items</label>
+                    <button 
+                      onClick={() => setSelectedItems([...selectedItems, { product_ID: "", qty: 1, price: 0 }])}
+                      className="text-blue-600 text-xs font-bold hover:underline"
+                    >+ Add Item</button>
+                  </div>
+
+                  {selectedItems.map((item, index) => (
+                    <div key={index} className="flex gap-2 mb-2 items-center">
+                      <select 
+                        className="flex-1 p-2 border text-black border-slate-200 rounded-lg text-sm"
+                        onChange={(e) => {
+                          const p = products.find(prod => prod.product_ID == e.target.value);
+                          const newItems = [...selectedItems];
+                          newItems[index] = { ...newItems[index], product_ID: e.target.value, price: p?.product_unitPrice || 0 };
+                          setSelectedItems(newItems);
+                        }}
+                      >
+                        <option value="">Select Product</option>
+                        {products.map(p => (
+                          <option key={p.product_ID} value={p.product_ID} disabled={p.product_stockQty <= 0}>
+                            {p.product_name} (Stock: {p.product_stockQty})
+                          </option>
+                        ))}
+                      </select>
+                      <input 
+                        type="number" min="1" placeholder="Qty" 
+                        className="w-20 p-2 border text-black border-slate-200 rounded-lg text-sm"
+                        value={item.qty}
+                        onChange={(e) => {
+                          const newItems = [...selectedItems];
+                          newItems[index].qty = Number(e.target.value);
+                          setSelectedItems(newItems);
+                        }}
+                      />
+                      <button 
+                        onClick={() => setSelectedItems(selectedItems.filter((_, i) => i !== index))}
+                        className="text-red-400 hover:text-red-600 px-2"
+                      >✕</button>
+                    </div>
+                  ))}
+                </div>
+
+                {/* Total Summary */}
+                <div className="bg-blue-50 p-4 rounded-xl flex justify-between items-center">
+                  <span className="text-sm font-bold text-blue-800">Total Order Amount:</span>
+                  <span className="text-xl font-black text-blue-600">
+                    ₱{selectedItems.reduce((sum, i) => sum + (i.qty * i.price), 0).toLocaleString()}
+                  </span>
+                </div>
+
+                <div className="flex gap-3 mt-8">
+                  <button 
+                    onClick={() => setIsCreateModalOpen(false)}
+                    className="flex-1 px-4 py-2 border border-slate-200 rounded-lg text-slate-600 font-medium hover:bg-slate-50"
+                  >Cancel</button>
+                  <button 
+                    className="flex-1 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-bold shadow-lg shadow-blue-100 transition-all"
+                    onClick={async () => {
+                      const total = selectedItems.reduce((sum, i) => sum + (i.qty * i.price), 0);
+                      const res = await fetch("/api/sales", {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({
+                          client_ID: formData.client_ID,
+                          items: selectedItems,
+                          totalAmount: total,
+                          amountPaid: 0 // Partner can add a payment input later
+                        })
+                      });
+                      
+                      if (res.ok) {
+                        const updated = await (await fetch("/api/sales")).json();
+                        setSales(updated);
+                        setIsCreateModalOpen(false);
+                        setSelectedItems([{ product_ID: "", qty: 1, price: 0 }]);
+                      } else {
+                        const err = await res.json();
+                        alert(err.error || "Failed to create order");
+                      }
+                    }}
+                  >Create Order & Update Inventory</button>
+                </div>
+              </div>
             </div>
           </div>
-        </div>
-      </div>
-    )}
+        )}
     </div>
   );
 }

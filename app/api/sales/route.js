@@ -4,57 +4,53 @@ import pool from "../../lib/db";
 // POST - CREATE SALE
 // ==========================
 
-export async function POST(req) {
-  const connection = await pool.getConnection(); // Get a connection for the transaction
-  try {
-    const body = await req.json();
-    const { client_id, employee_id, items, totalAmount, notes } = body;
+export async function POST(request) {
+    const connection = await pool.getConnection();
+    try {
+        await connection.beginTransaction();
 
-    await connection.beginTransaction();
+        const { client_ID, items, totalAmount, amountPaid } = await request.json();
 
-    // 1. Insert the main Sales record
-    const [saleResult] = await connection.query(
-      `INSERT INTO tbl_sales 
-      (client_id, employee_id, sales_totalAmount, sales_Balance, sales_status, sales_notes) 
-      VALUES (?, ?, ?, ?, 'Pending', ?)`,
-      [client_id, employee_id, totalAmount, totalAmount, notes]
-    );
+        // 1. Insert into tbl_sales
+        const [saleResult] = await connection.query(
+            `INSERT INTO tbl_sales (client_ID, sales_totalAmount, sales_amountPaid, sales_status, sales_createdAt) 
+             VALUES (?, ?, ?, 'Pending', NOW())`,
+            [client_ID, totalAmount, amountPaid]
+        );
 
-    const salesId = saleResult.insertId;
+        const newSaleID = saleResult.insertId;
 
-    // 2. Loop through items to record details AND reduce stock
-    for (const item of items) {
-      // Record the specific item sold
-      await connection.query(
-        `INSERT INTO tbl_sales_details 
-        (sales_ID, productLine_ID, salesDetail_qty, salesDetail_unitPriceSold, salesDetail_subtotal) 
-        VALUES (?, ?, ?, ?, ?)`,
-        [salesId, item.product_id, item.qty, item.unitPrice, item.qty * item.unitPrice]
-      );
+        // 2. Loop through items to insert details and update stock
+        for (const item of items) {
+            // Insert Detail
+            await connection.query(
+                `INSERT INTO tbl_sales_details (sales_ID, productLine_ID, salesDetail_qty, salesDetail_unitPriceSold, salesDetail_subtotal) 
+                 VALUES (?, ?, ?, ?, ?)`,
+                [newSaleID, item.product_ID, item.qty, item.price, item.qty * item.price]
+            );
 
-      // THE "STOCK OUT" LOGIC: Reduce quantity in tbl_product
-      const [updateResult] = await connection.query(
-        `UPDATE tbl_product 
-         SET product_stockQty = product_stockQty - ? 
-         WHERE product_ID = ? AND product_stockQty >= ?`,
-        [item.qty, item.product_id, item.qty]
-      );
+            // Subtract Stock
+            const [updateResult] = await connection.query(
+                `UPDATE tbl_product 
+                 SET product_stockQty = product_stockQty - ? 
+                 WHERE product_ID = ? AND product_stockQty >= ?`,
+                [item.qty, item.product_ID, item.qty]
+            );
 
-      // Check if we actually had enough stock
-      if (updateResult.affectedRows === 0) {
-        throw new Error(`Insufficient stock for product ID: ${item.product_id}`);
-      }
+            if (updateResult.affectedRows === 0) {
+                throw new Error(`Insufficient stock for product ID: ${item.product_ID}`);
+            }
+        }
+
+        await connection.commit();
+        return Response.json({ message: "Order created successfully", sales_ID: newSaleID }, { status: 201 });
+
+    } catch (error) {
+        await connection.rollback();
+        return Response.json({ error: error.message }, { status: 500 });
+    } finally {
+        connection.release();
     }
-
-    await connection.commit();
-    return Response.json({ message: "Sale completed and stock updated!", salesId });
-
-  } catch (error) {
-    await connection.rollback();
-    return Response.json({ error: error.message }, { status: 500 });
-  } finally {
-    connection.release();
-  }
 }
 
 // ==========================
