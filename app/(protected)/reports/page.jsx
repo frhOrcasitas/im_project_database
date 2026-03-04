@@ -85,16 +85,60 @@ function TableWrapper({ headers, children, footer }) {
 
 function DailyResult({ data }) {
   const rows = Array.isArray(data) ? data : [data];
-  if (!rows.length || !rows[0] || !rows[0].sale_date) return <EmptyState message="No sales found for this date." />;
-  const r = rows[0];
+  if (!rows.length) return <EmptyState message="No sales found for this date range." />;
+
+  // Aggregate totals across all days in range
+  const totals = rows.reduce((acc, r) => ({
+    total_transactions: acc.total_transactions + Number(r.total_transactions || 0),
+    total_sales:        acc.total_sales        + Number(r.total_sales || 0),
+    total_collected:    acc.total_collected    + Number(r.total_collected || 0),
+    total_outstanding:  acc.total_outstanding  + Number(r.total_outstanding || 0),
+    unpaid_count:       acc.unpaid_count       + Number(r.unpaid_count || 0),
+    partial_count:      acc.partial_count      + Number(r.partial_count || 0),
+  }), { total_transactions: 0, total_sales: 0, total_collected: 0, total_outstanding: 0, unpaid_count: 0, partial_count: 0 });
+
   return (
-    <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-      <StatCard label="Total Sales"      value={"P" + fmt(r.total_sales)}      color="text-green-600" />
-      <StatCard label="Transactions"     value={r.total_transactions || 0}      color="text-blue-600" />
-      <StatCard label="Collected"        value={"P" + fmt(r.total_collected)}   color="text-blue-600" />
-      <StatCard label="Outstanding"      value={"P" + fmt(r.total_outstanding)} color="text-red-600" />
-      <StatCard label="Unpaid Sales"     value={r.unpaid_count || 0}            color="text-red-500" />
-      <StatCard label="Partial Payments" value={r.partial_count || 0}           color="text-amber-600" />
+    <div className="flex flex-col gap-4">
+      {/* Summary totals */}
+      <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+        <StatCard label="Total Sales"      value={"P" + fmt(totals.total_sales)}      color="text-green-600" />
+        <StatCard label="Transactions"     value={totals.total_transactions}           color="text-blue-600" />
+        <StatCard label="Collected"        value={"P" + fmt(totals.total_collected)}   color="text-blue-600" />
+        <StatCard label="Outstanding"      value={"P" + fmt(totals.total_outstanding)} color="text-red-600" />
+        <StatCard label="Unpaid Sales"     value={totals.unpaid_count}                color="text-red-500" />
+        <StatCard label="Partial Payments" value={totals.partial_count}               color="text-amber-600" />
+      </div>
+
+      {/* Per-day breakdown if range spans multiple days */}
+      {rows.length > 1 && (
+        <div>
+          <SectionHeader title="Per Day Breakdown" count={rows.length} onExport={() => exportCSV(rows, "daily_report")} />
+          <div className="border border-slate-100 rounded-xl overflow-hidden">
+            <table className="w-full text-sm">
+              <thead className="bg-slate-50">
+                <tr>
+                  {["Date", "Transactions", "Total Sales", "Collected", "Outstanding"].map((h) => (
+                    <th key={h} className="text-left px-4 py-2.5 text-xs font-bold text-slate-500 uppercase tracking-wide">{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {rows.map((r, i) => (
+                  <tr key={i} className="border-t border-slate-50 hover:bg-slate-50">
+                    <td className="px-4 py-3 font-medium text-slate-700">
+                      {new Date(r.sale_date).toLocaleDateString("en-PH", { month: "short", day: "numeric", year: "numeric" })}
+                    </td>
+                    <td className="px-4 py-3 text-slate-600">{r.total_transactions}</td>
+                    <td className="px-4 py-3 font-semibold text-green-700">P{fmt(r.total_sales)}</td>
+                    <td className="px-4 py-3 text-blue-600">P{fmt(r.total_collected)}</td>
+                    <td className="px-4 py-3 text-red-600">P{fmt(r.total_outstanding)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -308,11 +352,14 @@ export default function ReportsPage() {
   const [loading, setLoading]       = useState(false);
   const [result, setResult]         = useState(null);
   const [error, setError]           = useState("");
+  const [startDate, setStartDate] = useState(today);
+  const [endDate, setEndDate]     = useState(today);
+
 
   const years = Array.from({ length: 6 }, (_, i) => String(new Date().getFullYear() - i));
 
   function buildUrl() {
-    if (activeType === "daily")        return "/api/reports/daily?date=" + date;
+    if (activeType === "daily") return `/api/reports/daily?start=${startDate}&end=${endDate}`;
     if (activeType === "monthly")      return "/api/reports/monthly?month=" + month;
     if (activeType === "revenue")      return "/api/reports/yearly?year=" + year;
     if (activeType === "top-products") return "/api/reports/top-products";
@@ -392,9 +439,17 @@ export default function ReportsPage() {
 
         <div className="flex flex-wrap gap-3 mb-5">
           {activeType === "daily" && (
-            <div className="flex flex-col gap-1">
-              <label className="text-xs font-bold text-slate-600 uppercase tracking-wide">Date</label>
-              <input type="date" className={inputCls + " w-48"} value={date} max={today} onChange={(e) => setDate(e.target.value)} />
+            <div className="flex flex-wrap gap-3">
+              <div className="flex flex-col gap-1">
+                <label className="text-xs font-bold text-slate-600 uppercase tracking-wide">From</label>
+                <input type="date" className={inputCls + " w-44"} value={startDate} max={today}
+                  onChange={(e) => setStartDate(e.target.value)} />
+              </div>
+              <div className="flex flex-col gap-1">
+                <label className="text-xs font-bold text-slate-600 uppercase tracking-wide">To</label>
+                <input type="date" className={inputCls + " w-44"} value={endDate} max={today} min={startDate}
+                  onChange={(e) => setEndDate(e.target.value)} />
+              </div>
             </div>
           )}
           {activeType === "monthly" && (

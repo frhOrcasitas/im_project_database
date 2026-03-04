@@ -590,59 +590,6 @@ function GenerateReportModal({ open, onClose }) {
     );
   };
 
-  return (
-    <Modal open={open} onClose={() => { setResult(null); setError(""); onClose(); }} title="📊 Generate Report">
-      <div className="flex flex-col gap-4">
-
-        {/* Report Type Selector */}
-        <Field label="Report Type" required>
-          <div className="flex flex-col gap-2">
-            {reportOptions.map((opt) => (
-              <label key={opt.value}
-                className={`flex items-start gap-3 border rounded-xl px-4 py-3 cursor-pointer transition-colors ${
-                  reportType === opt.value
-                    ? "border-blue-400 bg-blue-50"
-                    : "border-slate-200 hover:bg-slate-50"
-                }`}>
-                <input type="radio" name="reportType" value={opt.value} checked={reportType === opt.value}
-                  onChange={(e) => { setReportType(e.target.value); setResult(null); }}
-                  className="mt-0.5 accent-blue-600" />
-                <div>
-                  <div className="text-sm font-medium text-slate-800">{opt.label}</div>
-                  <div className="text-xs text-slate-500">{opt.desc}</div>
-                </div>
-              </label>
-            ))}
-          </div>
-        </Field>
-
-        {/* Date Picker */}
-        {reportType === "daily" && (
-          <Field label="Date">
-            <input className={inputCls} type="date" value={date} max={today}
-              onChange={(e) => setDate(e.target.value)} />
-          </Field>
-        )}
-        {reportType === "monthly" && (
-          <Field label="Month">
-            <input className={inputCls} type="month" value={month}
-              onChange={(e) => setMonth(e.target.value)} />
-          </Field>
-        )}
-
-        <button onClick={fetchReport} disabled={loading}
-          className="w-full bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white font-medium py-2.5 rounded-lg text-sm transition-colors">
-          {loading ? "Generating..." : "Generate Report"}
-        </button>
-
-        {error && (
-          <div className="bg-red-50 border border-red-200 text-red-700 rounded-lg px-4 py-3 text-sm">{error}</div>
-        )}
-
-        {renderResult()}
-      </div>
-    </Modal>
-  );
 }
 
 // ══════════════════════════════════════════════════════════════════════════════
@@ -669,10 +616,6 @@ export default function QuickActions() {
         <button onClick={() => setModal("customer")}
           className="w-full bg-slate-200 hover:bg-slate-300 text-slate-700 font-medium py-2.5 px-4 rounded-lg text-center text-sm transition-colors">
           👥 Add Customer
-        </button>
-        <button onClick={() => setModal("report")}
-          className="w-full bg-slate-200 hover:bg-slate-300 text-slate-700 font-medium py-2.5 px-4 rounded-lg text-center text-sm transition-colors">
-          📊 Generate Report
         </button>
       </div>
 

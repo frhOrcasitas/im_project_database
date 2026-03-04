@@ -271,12 +271,13 @@ function PaymentPanel({ salesId, onPaymentSuccess }) {
     try {
       const res = await fetch(`/api/sales/${salesId}/payment`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          ...form,
-          payment_amount: amountEntered,
-          employee_ID: parseInt(form.employee_ID),
-        }),
+          client_id: sale.client_ID,
+          employee_id: form.employee_ID,
+          amount: amountEntered,
+          or_number: form.payment_ORNumber,
+          type: form.payment_type,
+        })
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error);
