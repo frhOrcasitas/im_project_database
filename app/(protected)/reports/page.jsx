@@ -413,19 +413,26 @@ export default function ReportsPage() {
       </div>
 
       {/* Type Cards */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 xl:grid-cols-7 gap-3">
+      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
         {REPORT_TYPES.map((r) => (
           <button
             key={r.key}
             onClick={() => { setActiveType(r.key); setResult(null); setError(""); }}
-            className={"border-2 rounded-xl p-3 text-center transition-all hover:shadow-md " + (
+            className={"group flex flex-col items-center justify-center aspect-square border-2 rounded-2xl p-4 text-center transition-all hover:shadow-lg " + (
               activeType === r.key
-                ? "border-blue-500 bg-blue-50 shadow-sm"
-                : "border-slate-200 bg-white hover:border-blue-300"
+                ? "border-blue-500 bg-blue-50 shadow-sm ring-2 ring-blue-100"
+                : "border-slate-100 bg-white hover:border-blue-300"
             )}
           >
-            <div className="text-2xl mb-1">{r.icon}</div>
-            <div className="text-xs font-bold text-slate-800 leading-tight">{r.title}</div>
+            <div className="text-4xl mb-3 transform group-hover:scale-110 transition-transform">
+              {r.icon}
+            </div>
+            <div className="text-sm font-bold text-slate-800 leading-tight">
+              {r.title}
+            </div>
+            <div className="text-[10px] text-slate-400 mt-2 opacity-0 group-hover:opacity-100 transition-opacity hidden sm:block">
+              Click to view
+            </div>
           </button>
         ))}
       </div>

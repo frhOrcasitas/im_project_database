@@ -64,17 +64,36 @@ export default function Receivables() {
 
   const handlePaymentSubmit = async (e) => {
     e.preventDefault();
-    
-    // LOG THIS to see if clientId is empty
-    console.log("Sending to API:", paymentData);
-
     try {
-      const res = await fetch("/api/receivables/pay", {
+      // Fetch this client's unpaid sales, apply to oldest first
+      const salesRes = await fetch("/api/sales");
+      const salesData = await salesRes.json();
+
+      const unpaidSales = Array.isArray(salesData)
+        ? salesData
+            .filter(s =>
+              String(s.client_ID) === String(paymentData.clientId) &&
+              s.sales_Balance > 0 &&
+              s.sales_status !== "Cancelled"
+            )
+            .sort((a, b) => new Date(a.sales_createdAt) - new Date(b.sales_createdAt))
+        : [];
+
+      if (!unpaidSales.length) {
+        return alert("No unpaid invoices found for this client.");
+      }
+
+      const targetSale = unpaidSales[0];
+
+      const res = await fetch(`/api/sales/${targetSale.sales_ID}/payment`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          clientId: paymentData.clientId,
-          paymentAmount: Number(paymentData.amount),
+          client_id:   paymentData.clientId,
+          employee_id: 1,
+          amount:      Number(paymentData.amount),
+          or_number:   null,
+          type:        "Cash",
         }),
       });
 
@@ -83,9 +102,9 @@ export default function Receivables() {
       if (res.ok) {
         alert("Payment recorded successfully!");
         setIsModalOpen(false);
-        window.location.reload(); 
+        window.location.reload();
       } else {
-        alert("Error: " + (data.details || data.error));
+        alert("Error: " + (data.error || "Payment failed"));
       }
     } catch (error) {
       console.error("Payment failed:", error);

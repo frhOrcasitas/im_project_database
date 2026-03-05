@@ -79,16 +79,41 @@ export default function Customers() {
   const handleCustomerSubmit = async (e) => {
     e.preventDefault();
     const method = modalMode === "add" ? "POST" : "PUT";
+
+    const payload = modalMode === "add" ? {
+      client_name: customerForm.name,
+      contactPerson: customerForm.contact,
+      client_contactNumber: customerForm.phone,
+      client_email: customerForm.email,
+      client_address: customerForm.address,
+      TIN_Code: customerForm.tin
+
+    } : {
+      client_ID: customerForm.id,
+      name: customerForm.name,
+      contact: customerForm.contact,
+      phone: customerForm.phone,
+      email: customerForm.email,
+      address: customerForm.address,
+      tin: customerForm.tin
+
+    };
+
     try {
       const res = await fetch("/api/client", {
         method,
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(modalMode === "edit" ? { ...customerForm, client_ID: customerForm.id } : customerForm),
+        body: JSON.stringify(payload),
       });
+
       if (res.ok) {
         setIsModalOpen(false);
         fetchCustomers();
+      } else {
+        const errorData = await res.json();
+        console.error("Server error:", errorData.error);
       }
+
     } catch (err) {
       console.error("Customer action failed:", err);
     }
@@ -103,12 +128,15 @@ export default function Customers() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          payment_type: paymentForm.type,
-          payment_ORNumber: paymentForm.or_number,
-          payment_amount: parseFloat(paymentForm.amount),
-          employee_ID: paymentForm.employee_id
+          client_id:   selected.client_ID,        // ← was missing entirely
+          employee_id: paymentForm.employee_id,
+          amount:      parseFloat(paymentForm.amount),
+          or_number:   paymentForm.or_number,
+          type:        paymentForm.type,
         }),
       });
+
+      const data = await res.json();
 
       if (res.ok) {
         alert("Payment Recorded!");
@@ -117,6 +145,8 @@ export default function Customers() {
         fetchCustomers();
         const updatedTx = await fetch(`/api/client/${selected.client_ID}/transactions`).then(r => r.json());
         setTransactions(updatedTx);
+      } else {
+        alert("Error: " + (data.error || "Payment failed"));
       }
     } catch (err) {
       console.error("Payment submission failed:", err);
@@ -258,7 +288,7 @@ export default function Customers() {
 
       {isModalOpen && (
       <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50">
-        <div className="bg-white p-6 rounded-2xl w-full max-w-md shadow-xl text-slate-800">
+        <div className="bg-white p-6 rounded-2xlw-[360px] max-w-[90%] shadow-xl text-slate-800">
           <h2 className="text-xl font-bold mb-4">{modalMode === "add" ? "Add New Customer" : "Edit Customer Details"}</h2>
           <form onSubmit={handleCustomerSubmit} className="flex flex-col gap-3">
             <div>
@@ -308,7 +338,7 @@ export default function Customers() {
 
     {isPaymentModalOpen && (
     <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50">
-      <div className="bg-white p-6 rounded-2xl w-full max-w-sm shadow-xl text-slate-800">
+      <div className="bg-white p-6 rounded-2xl w-[360px] max-w-[90%] shadow-xl text-slate-800">
         <h2 className="text-xl font-bold mb-2">Record Payment</h2>
         <p className="text-sm text-slate-500 mb-4">Customer: {selected.client_name}</p>
         

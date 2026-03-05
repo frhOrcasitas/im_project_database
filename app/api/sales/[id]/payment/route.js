@@ -34,8 +34,17 @@ export async function POST(req, { params }) {
 
     // 3. Reduce Client overall balance
     await connection.query(
-      `UPDATE tbl_client SET client_outstandingbalance = client_outstandingbalance - ? WHERE client_ID = ?`,
-      [amount, client_id]
+      `UPDATE tbl_client c
+       SET c.client_outstandingbalance = (
+         SELECT COALESCE(SUM(s.sales_Balance), 0)
+         FROM tbl_sales s
+         WHERE s.client_ID = ?
+           AND s.sales_paymentStatus != 'Paid'
+           AND s.sales_status != 'Cancelled'
+           AND s.sales_Balance > 0
+       )
+       WHERE c.client_ID = ?`,
+      [client_id, client_id]
     );
 
     // 4. Update status if fully paid

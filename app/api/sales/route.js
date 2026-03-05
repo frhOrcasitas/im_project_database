@@ -84,11 +84,19 @@ export async function POST(request) {
 
             // Update client outstanding balance
             await connection.query(
-                `UPDATE tbl_client
-                 SET client_outstandingbalance = client_outstandingbalance + ?
-                 WHERE client_ID = ?`,
-                [Math.max(0, newBalance), client_ID]
+                `UPDATE tbl_client c
+                SET c.client_outstandingbalance = (
+                    SELECT COALESCE(SUM(s.sales_Balance), 0)
+                    FROM tbl_sales s
+                    WHERE s.client_ID = ?
+                    AND s.sales_paymentStatus != 'Paid'
+                    AND s.sales_status != 'Cancelled'
+                    AND s.sales_Balance > 0
+                )
+                WHERE c.client_ID = ?`,
+                [client_ID, client_ID]
             );
+
         } else {
             // Fully unpaid — add full amount to client outstanding balance
             await connection.query(
@@ -118,6 +126,7 @@ export async function GET() {
     const [rows] = await pool.query(`
       SELECT 
         s.sales_ID,
+        s.client_ID,
         s.sales_createdAt, 
         s.sales_totalAmount, 
         s.sales_Balance, 

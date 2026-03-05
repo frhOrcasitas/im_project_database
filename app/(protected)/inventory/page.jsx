@@ -174,12 +174,12 @@ export default function Inventory() {
               placeholder="Search code or name..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              className="border border-slate-200 rounded-lg px-3 py-2 text-sm w-full max-w-xs focus:ring-2 focus:ring-blue-500 outline-none"
+              className="text-black border border-slate-200 rounded-lg px-3 py-2 text-sm w-full max-w-xs focus:ring-2 focus:ring-blue-500 outline-none"
             />
             <select
               value={statusFilter}
               onChange={(e) => setStatusFilter(e.target.value)}
-              className="border border-slate-200 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none bg-white"
+              className="text-black border border-slate-200 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none bg-white"
             >
               <option value="all">All Status</option>
               <option value="in-stock">In Stock</option>
@@ -282,46 +282,74 @@ export default function Inventory() {
         )}
 
         {restockItem && (
-            <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center z-50">
-              <div className="bg-white p-6 rounded-2xl w-full max-w-sm shadow-2xl border border-slate-100">
-                <div className="flex justify-between items-center mb-4">
-                  <h2 className="text-xl font-bold text-slate-800">Restock Product</h2>
-                  <button onClick={() => setRestockItem(null)} className="text-slate-400 hover:text-slate-600">✕</button>
-                </div>
-                
-                <p className="text-sm text-slate-500 mb-4">
-                  Adding stock for: <span className="font-bold text-blue-600">{restockItem.product_name}</span>
-                </p>
+          <div
+            className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50"
+            onClick={() => setRestockItem(null)}
+          >
 
-                <form onSubmit={handleRestockSubmit} className="flex flex-col gap-4">
-                  <div>
-                    <label className="text-[10px] font-bold uppercase text-slate-400">Quantity to Add ({restockItem.product_unit})</label>
-                    <input 
-                      type="number" required min="1"
-                      className="w-full border border-slate-200 rounded-lg p-2 mt-1 focus:ring-2 focus:ring-green-500 outline-none"
-                      value={restockQty}
-                      onChange={(e) => setRestockQty(e.target.value)}
-                    />
-                  </div>
-
-                  <div>
-                    <label className="text-[10px] font-bold uppercase text-slate-400">Unit Cost (₱)</label>
-                    <input 
-                      type="number" required step="0.01"
-                      className="w-full border border-slate-200 rounded-lg p-2 mt-1 focus:ring-2 focus:ring-green-500 outline-none"
-                      placeholder="Current cost from production"
-                      value={restockCost}
-                      onChange={(e) => setRestockCost(e.target.value)}
-                    />
-                  </div>
-
-                  <button type="submit" className="w-full bg-green-600 hover:bg-green-700 text-white font-bold py-3 rounded-xl transition-all shadow-lg shadow-green-200">
-                    Confirm Restock
-                  </button>
-                </form>
+            <div
+              className="bg-white p-6 rounded-xl shadow-xl max-w-sm w-[380px]"
+              onClick={(e) => e.stopPropagation()}
+            >
+              
+              <div className="flex justify-between items-center mb-3">
+                <h2 className="text-lg font-bold text-slate-800">Restock Product</h2>
+                <button 
+                  onClick={() => setRestockItem(null)} 
+                  className="text-slate-400 hover:text-slate-600"
+                >
+                  ✕
+                </button>
               </div>
+
+              <p className="text-xs text-slate-500 mb-3">
+                Adding stock for: 
+                <span className="font-bold text-blue-600 ml-1">
+                  {restockItem.product_name}
+                </span>
+              </p>
+
+              <form onSubmit={handleRestockSubmit} className="flex flex-col gap-3">
+
+                <div>
+                  <label className="text-[10px] font-bold uppercase text-slate-400">
+                    Quantity ({restockItem.product_unit})
+                  </label>
+                  <input 
+                    type="number"
+                    required
+                    min="1"
+                    className="text-black w-full border border-slate-200 rounded-lg p-2 mt-1 focus:ring-2 focus:ring-green-500 outline-none"
+                    value={restockQty}
+                    onChange={(e) => setRestockQty(e.target.value)}
+                  />
+                </div>
+
+                <div>
+                  <label className="text-[10px] font-bold uppercase text-slate-400">
+                    Unit Cost (₱)
+                  </label>
+                  <input 
+                    type="number"
+                    required
+                    step="0.01"
+                    className="text-black w-full border border-slate-200 rounded-lg p-2 mt-1 focus:ring-2 focus:ring-green-500 outline-none"
+                    value={restockCost}
+                    onChange={(e) => setRestockCost(e.target.value)}
+                  />
+                </div>
+
+                <button 
+                  type="submit"
+                  className="w-full bg-green-600 hover:bg-green-700 text-white font-semibold py-2 rounded-lg transition"
+                >
+                  Confirm Restock
+                </button>
+
+              </form>
             </div>
-          )}
+          </div>
+        )}
 
           {editItem && (
             <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50">

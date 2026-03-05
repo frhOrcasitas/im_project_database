@@ -19,11 +19,12 @@ export async function GET() {
 
     // 3. Total Outstanding — only unpaid/partial, exclude fully paid
     const [receivables] = await pool.query(`
-      SELECT SUM(sales_Balance) AS total
-      FROM tbl_sales
-      WHERE sales_paymentStatus != 'Paid'
-        AND sales_Balance > 0
-    `);
+    SELECT SUM(sales_Balance) AS total
+    FROM tbl_sales
+    WHERE sales_paymentStatus != 'Paid'
+      AND sales_Balance > 0
+      AND sales_status != 'Cancelled'
+  `);
 
     // 4. Recent Sales
     const [recentSales] = await pool.query(`

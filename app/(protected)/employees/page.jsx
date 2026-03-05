@@ -16,6 +16,7 @@ const EMPTY_FORM = {
   employee_dateHired: "",
   employee_birthdate: "",
   employee_status:    "Active",
+  isManager:          0,
 };
 
 const ROLES = [
@@ -239,6 +240,21 @@ function EmployeeForm({ initial, isEdit, onSubmit, onCancel, loading }) {
             <option>Other</option>
           </select>
         </Field>
+      </div>
+
+      <div className="bg-slate-50 p-3 rounded-lg border border-slate-100">
+        <label className="flex items-center gap-3 cursor-pointer">
+          <input
+            type="checkbox"
+            className="w-4 h-4 rounded text-blue-600 focus:ring-blue-500 border-slate-300 transition"
+            checked={form.isManager === 1}
+            onChange={(e) => set("isManager", e.target.checked ? 1 : 0)}
+          />
+          <div>
+            <p className="text-sm font-semibold text-slate-700">Set as Manager</p>
+            <p className="text-xs text-slate-500">This will add them to the management records.</p>
+          </div>
+        </label>
       </div>
 
       <div className="grid grid-cols-2 gap-3">
@@ -496,13 +512,28 @@ export default function EmployeesPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(formData),
       });
-      if (!res.ok) throw new Error("Update failed");
+      if (!res.ok) {
+        const data = await res.json();
+        throw new Error(data.error || "Update failed");
+      }
       setToast({ message: "Changes saved!", type: "success" });
       setEditOpen(false);
-      fetchEmployees();
+
+      // Refresh list then re-select the updated employee
+      const r = await fetch("/api/employee");
+      const data = await r.json();
+      const list = Array.isArray(data) ? data : [];
+      setEmployees(list);
+
+      // Re-select the updated employee from fresh data
+      const updated = list.find((e) => e.employee_ID === formData.employee_ID);
+      if (updated) setSelected(updated);
+
     } catch (err) {
       setToast({ message: err.message, type: "error" });
-    } finally { setFormLoading(false); }
+    } finally {
+      setFormLoading(false);
+    }
   }
 
   async function handleDeactivate() {

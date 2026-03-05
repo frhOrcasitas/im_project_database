@@ -93,7 +93,9 @@ function SalesList({ selectedId, onSelect }) {
       .then((r) => r.json())
       .then((data) => {
         const unpaid = Array.isArray(data)
-          ? data.filter((s) => s.sales_paymentStatus !== "Paid")
+          ? data.filter((s) => 
+            s.sales_paymentStatus !== "Paid" && 
+            s.sales_status !== "Cancelled")
           : [];
         setSales(unpaid);
       })
