@@ -1,9 +1,6 @@
 import pool from "../../lib/db";
 
-
 // POST - CREATE SHIPMENTS
-
-import pool from "../../lib/db";
 
 export async function POST(request) {
     const connection = await pool.getConnection();
@@ -31,9 +28,12 @@ export async function POST(request) {
         for (const item of items) {
             // Check remaining quantity for this specific productLine
             const [sold] = await connection.query(
-                `SELECT salesDetail_qty, product_ID FROM tbl_sales_details WHERE sales_ID = ? AND productLine_ID = ?`,
-                [sales_ID, item.productLine_ID]
+                `SELECT salesDetail_qty FROM tbl_sales_details 
+                WHERE sales_ID = ? AND productLine_ID = ?`,
+                [sales_ID, item.product_ID]  // same value as productLine_ID
             );
+
+            if (!sold.length) throw new Error(`Item not found in sale: product ${item.product_ID}`);
 
             const [shipped] = await connection.query(
                 `SELECT IFNULL(SUM(sp.product_quantity), 0) as shipped_qty
@@ -46,16 +46,23 @@ export async function POST(request) {
             const remaining = sold[0].salesDetail_qty - shipped[0].shipped_qty;
             if (item.quantity > remaining) throw new Error(`Over-shipping item ${item.productLine_ID}. Max: ${remaining}`);
 
+            console.log("Inserting shipment product detail:", {
+                shipment_ID,
+                productLine_ID: item.productLine_ID,
+                product_ID: item.product_ID,
+                quantity: item.quantity
+            });
+
             // Insert details
             await connection.query(
-                `INSERT INTO tbl_shipment_productdetails (shipment_ID, productLine_ID, product_quantity) VALUES (?, ?, ?)`,
-                [shipment_ID, item.productLine_ID, item.quantity]
+                `INSERT INTO tbl_shipment_productdetails (shipment_ID, productLine_ID, product_ID, product_quantity) VALUES (?, ?, ?, ?)`,
+                [shipment_ID, item.productLine_ID, item.product_ID, item.quantity]
             );
 
             // ACTUAL INVENTORY DEDUCTION (Rule: "Recorded and deducted")
             await connection.query(
                 `UPDATE tbl_product SET product_stockQty = product_stockQty - ? WHERE product_ID = ?`,
-                [item.quantity, sold[0].product_ID]
+                [item.quantity, item.product_ID]  // ← item.product_ID, not sold[0].product_ID
             );
         }
 
@@ -100,25 +107,32 @@ export async function POST(request) {
 // GET - LIST SHIPMENTS
 
 export async function GET() {
-    try {
-        const [rows] = await pool.query(
-            `SELECT
-                sh.shipment_ID,
-                sh.sales_ID,
-                sh.shipment_date,
-                sh.vehicle_id,
-                m.manager_ID,
-                s.sales_status
-            FROM tbl_shipment sh
-            JOIN tbl_manager m ON sh.manager_id = m.manager_ID
-            JOIN tbl_sales s ON sh.sales_ID = s.sales_ID
-            ORDER BY sh.shipment_date DESC`
-        );
-
-        return Response.json(rows);
-
-
-    } catch (error) {
-        return Response.json({error: error.message}, {status: 500});
-    }
+  try {
+    const [rows] = await pool.query(`
+      SELECT
+        sh.shipment_ID,
+        sh.sales_ID,
+        sh.shipment_date,
+        sh.vehicle_id,
+        v.vehicle_number,
+        v.vehicle_model,
+        m.manager_ID,
+        e.employee_name  AS manager_name,
+        s.sales_status,
+        s.sales_paymentStatus,
+        s.sales_totalAmount,
+        s.sales_Balance,
+        c.client_name
+      FROM tbl_shipment sh
+      JOIN tbl_manager m   ON sh.manager_id  = m.manager_ID
+      JOIN tbl_employee e  ON m.employee_ID  = e.employee_ID
+      JOIN tbl_sales s     ON sh.sales_ID    = s.sales_ID
+      JOIN tbl_client c    ON s.client_ID    = c.client_ID
+      JOIN tbl_vehicle v   ON sh.vehicle_id  = v.vehicle_ID
+      ORDER BY sh.shipment_date DESC
+    `);
+    return Response.json(rows);
+  } catch (error) {
+    return Response.json({ error: error.message }, { status: 500 });
+  }
 }

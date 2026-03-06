@@ -225,6 +225,7 @@ function PaymentPanel({ salesId, onPaymentSuccess }) {
   const [loading, setLoading]   = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError]       = useState("");
+  const [employees, setEmployees] = useState([]);
 
   const [form, setForm] = useState({
     payment_type:    "Cash",
@@ -252,6 +253,17 @@ function PaymentPanel({ salesId, onPaymentSuccess }) {
       })
       .catch(() => setError("Failed to load sale details."))
       .finally(() => setLoading(false));
+  }, [salesId]);
+
+  useEffect(() => {
+    // Fetch employees list for the dropdown
+    fetch("/api/employee") // Ensure this endpoint exists and returns [{employee_ID: 1, employee_name: 'John'}, ...]
+      .then((r) => r.json())
+      .then((data) => setEmployees(Array.isArray(data) ? data : []))
+      .catch(() => console.error("Failed to load employees"));
+
+    if (!salesId) return;
+    // ... your existing fetch for sales data
   }, [salesId]);
 
   const setField = (key, val) => setForm((f) => ({ ...f, [key]: val }));
@@ -413,6 +425,10 @@ function PaymentPanel({ salesId, onPaymentSuccess }) {
                       {p.payment_ORNumber && (
                         <span className="ml-2 text-slate-500">OR #{p.payment_ORNumber}</span>
                       )}
+                      {/* This is the new line you are adding: */}
+                      <div className="mt-1 text-slate-500 italic">
+                        Processed by: {p.employee_name || `ID: ${p.employee_ID}`}
+                      </div>
                     </div>
                   </div>
                 </div>
@@ -473,15 +489,21 @@ function PaymentPanel({ salesId, onPaymentSuccess }) {
             </Field>
           </div>
 
-          <Field label="Received By (Employee ID)" required>
-            <input
-              className={inputCls}
-              type="number" placeholder="e.g. 3"
-              value={form.employee_ID}
-              onChange={(e) => setField("employee_ID", e.target.value)}
-              required
-            />
-          </Field>
+          <Field label="Received By" required>
+          <select
+            className={inputCls}
+            value={form.employee_ID}
+            onChange={(e) => setField("employee_ID", e.target.value)}
+            required
+          >
+            <option value="">Select Employee...</option>
+            {employees.map((emp) => (
+              <option key={emp.employee_ID} value={emp.employee_ID}>
+                {emp.employee_name}
+              </option>
+            ))}
+          </select>
+        </Field>
 
           {/* Live balance preview */}
           {amountEntered > 0 && (

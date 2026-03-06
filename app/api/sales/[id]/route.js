@@ -4,7 +4,7 @@ export async function GET(request, { params }) {
   try {
     const { id } = await params;
 
-    // 1. Fetch Sales Header (Joining with tbl_client)
+    // 1. Fetch Sales Header
     const [saleRows] = await pool.query(
       `SELECT s.*, c.client_name 
        FROM tbl_sales s 
@@ -12,18 +12,21 @@ export async function GET(request, { params }) {
        WHERE s.sales_ID = ?`, [id]
     );
 
-    // 2. Fetch Sales Details (Items)
-    // Note: We'd ideally join with a product table here to get the name
+    // 2. Fetch Sales Details (Joining with tbl_product to get the product name)
     const [itemRows] = await pool.query(
-      `SELECT sd.* FROM tbl_sales_details sd 
+      `SELECT sd.*, p.product_name 
+       FROM tbl_sales_details sd 
+       JOIN tbl_product p ON sd.productLine_ID = p.product_ID
        WHERE sd.sales_ID = ?`, [id]
     );
 
-    // 3. Fetch Payment History from tbl_payment_details
+    // 3. Fetch Payment History (JOINING WITH tbl_employee FOR THE NAME)
     const [paymentRows] = await pool.query(
-      `SELECT * FROM tbl_payment_details 
-       WHERE sales_ID = ? 
-       ORDER BY payment_paidDate DESC`, [id]
+      `SELECT pd.*, e.employee_name 
+       FROM tbl_payment_details pd
+       LEFT JOIN tbl_employee e ON pd.employee_ID = e.employee_ID
+       WHERE pd.sales_ID = ? 
+       ORDER BY pd.payment_paidDate DESC`, [id]
     );
 
     if (saleRows.length === 0) return Response.json({ error: "Sale not found" }, { status: 404 });

@@ -1,3 +1,6 @@
+import pool from "../../../lib/db";
+
+
 export async function POST(request, { params }) {
     const connection = await pool.getConnection();
     try {
@@ -58,4 +61,37 @@ export async function POST(request, { params }) {
     } finally {
         connection.release();
     }
+}
+
+
+export async function GET(req, { params }) {
+  const { id } = await params;
+  try {
+    // Employees assigned to this shipment
+    const [employees] = await pool.query(`
+      SELECT
+        e.employee_ID,
+        e.employee_name,
+        e.employee_role
+      FROM tbl_shipment_employee_details sed
+      JOIN tbl_employee e ON sed.employee_ID = e.employee_ID
+      WHERE sed.shipment_ID = ?
+    `, [id]);
+
+    // Items shipped
+    const [items] = await pool.query(`
+      SELECT
+        sp.product_ID,
+        sp.product_quantity,
+        sp.productLine_ID,
+        p.product_name
+      FROM tbl_shipment_productdetails sp
+      JOIN tbl_product p ON sp.product_ID = p.product_ID
+      WHERE sp.shipment_ID = ?
+    `, [id]);
+
+    return Response.json({ employees, items });
+  } catch (error) {
+    return Response.json({ error: error.message }, { status: 500 });
+  }
 }
