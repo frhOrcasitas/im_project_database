@@ -19,13 +19,15 @@ function WarehouseDamageModal({ products, onClose, onSuccess }) {
   const [error,      setError]      = useState("");
 
   useEffect(() => {
-    Promise.all([fetch("/api/employee"), fetch("/api/employee")])
-      .then(([r1, r2]) => Promise.all([r1.json(), r2.json()]))
-      .then(([empData]) => {
-        const all = Array.isArray(empData) ? empData : [];
-        setManagers(all.filter(e => Number(e.isManager) === 1));
-        setEmployees(all.filter(e => e.employee_status === "Active"));
-      });
+    // Fetch employee data and filter for managers and active employees
+    fetch("/api/employee")
+      .then(res => res.json())
+      .then(data => {
+        const all = Array.isArray(data) ? data : [];
+        setManagers(all.filter(e => Number(e.isManager) === 1 || e.role === "Manager"));
+        setEmployees(all.filter(e => e.employee_status === "Active" || e.status === "Active"));
+      })
+      .catch(err => console.error("Error fetching employees:", err));
   }, []);
 
   const addItem = () => setItems(i => [...i, { product_ID: "", damage_quantity: 1, damage_description: "" }]);
@@ -44,17 +46,20 @@ function WarehouseDamageModal({ products, onClose, onSuccess }) {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          manager_id:  Number(form.manager_id),
-          employee_id: Number(form.employee_id),
+          manager_ID:   Number(form.manager_id), 
+          employee_ID:  Number(form.employee_id), 
+          damage_date: new Date().toISOString().split('T')[0],
           items: items.map(i => ({
             product_ID:         Number(i.product_ID),
             damage_quantity:    Number(i.damage_quantity),
-            damage_description: i.damage_description || null,
+            damage_description: i.damage_description || "No description",
           })),
         }),
       });
+      
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error);
+      if (!res.ok) throw new Error(data.error || "Failed to record damage");
+      
       onSuccess("Warehouse damage recorded.");
       onClose();
     } catch (err) {
@@ -69,22 +74,24 @@ function WarehouseDamageModal({ products, onClose, onSuccess }) {
   return (
     <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-[9999] p-4">
       <div className="bg-white rounded-2xl w-full max-w-xl shadow-xl max-h-[90vh] flex flex-col overflow-hidden">
+        
+        {/* Modal Header */}
         <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between shrink-0">
           <div>
             <h2 className="text-lg font-bold text-slate-800">🏭 Record Warehouse Damage</h2>
             <p className="text-xs text-slate-400 mt-0.5">Stock will be deducted immediately</p>
           </div>
-          <button onClick={onClose} className="text-slate-400 hover:text-slate-600 w-8 h-8 flex items-center justify-center rounded-lg hover:bg-slate-100">✕</button>
+          <button onClick={onClose} className="text-slate-400 hover:text-slate-600 w-8 h-8 flex items-center justify-center rounded-lg hover:bg-slate-100 font-bold text-xl">✕</button>
         </div>
 
+        {/* Modal Body */}
         <div className="overflow-y-auto flex-1 px-6 py-5 flex flex-col gap-4">
-          {/* Manager + Employee */}
           <div className="grid grid-cols-2 gap-4">
             <div>
               <label className="text-xs font-bold text-slate-500 uppercase tracking-wide block mb-1.5">Manager <span className="text-red-400">*</span></label>
               <select className={inputCls} value={form.manager_id} onChange={e => setForm(f => ({ ...f, manager_id: e.target.value }))}>
                 <option value="">Select manager...</option>
-                {managers.map(m => <option key={m.manager_ID} value={m.manager_ID}>{m.employee_name}</option>)}
+                {managers.map(m => <option key={m.employee_ID} value={m.employee_ID}>{m.employee_name}</option>)}
               </select>
             </div>
             <div>
@@ -96,7 +103,6 @@ function WarehouseDamageModal({ products, onClose, onSuccess }) {
             </div>
           </div>
 
-          {/* Items */}
           <div>
             <div className="flex items-center justify-between mb-2">
               <label className="text-xs font-bold text-slate-500 uppercase tracking-wide">Damaged Items <span className="text-red-400">*</span></label>
@@ -104,7 +110,7 @@ function WarehouseDamageModal({ products, onClose, onSuccess }) {
             </div>
             <div className="flex flex-col gap-3">
               {items.map((item, idx) => (
-                <div key={idx} className="border border-slate-200 rounded-xl p-3 flex flex-col gap-2 bg-slate-50">
+                <div key={idx} className="border border-slate-200 rounded-xl p-3 flex flex-col gap-2 bg-slate-50 relative">
                   <div className="flex gap-2 items-center">
                     <select
                       className="flex-1 border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-800 bg-white focus:outline-none focus:ring-2 focus:ring-red-400"
@@ -112,7 +118,11 @@ function WarehouseDamageModal({ products, onClose, onSuccess }) {
                       onChange={e => updateItem(idx, "product_ID", e.target.value)}
                     >
                       <option value="">Select product...</option>
-                      {products.map(p => <option key={p.product_ID} value={p.product_ID}>{p.product_name} (Stock: {p.product_stockQty})</option>)}
+                      {products.map(p => (
+                        <option key={p.product_ID} value={p.product_ID}>
+                          {p.product_name} (Stock: {p.product_stockQty})
+                        </option>
+                      ))}
                     </select>
                     <input
                       type="number" min="1"
@@ -137,12 +147,19 @@ function WarehouseDamageModal({ products, onClose, onSuccess }) {
             </div>
           </div>
 
-          {error && <div className="bg-red-50 border border-red-200 text-red-700 rounded-lg px-4 py-3 text-sm">{error}</div>}
+          {error && <div className="bg-red-50 border border-red-200 text-red-700 rounded-lg px-4 py-3 text-sm font-medium">{error}</div>}
         </div>
 
-        <div className="px-6 py-4 border-t border-slate-100 flex gap-3 shrink-0">
-          <button onClick={onClose} className="flex-1 border border-slate-200 text-slate-600 font-medium py-2.5 rounded-lg text-sm hover:bg-slate-50">Cancel</button>
-          <button onClick={handleSubmit} disabled={submitting} className="flex-1 bg-red-600 hover:bg-red-700 disabled:opacity-50 text-white font-semibold py-2.5 rounded-lg text-sm">
+        {/* Modal Footer */}
+        <div className="px-6 py-4 border-t border-slate-100 flex gap-3 shrink-0 bg-white">
+          <button onClick={onClose} className="flex-1 border border-slate-200 text-slate-600 font-medium py-2.5 rounded-lg text-sm hover:bg-slate-50 transition-colors">
+            Cancel
+          </button>
+          <button 
+            onClick={handleSubmit} 
+            disabled={submitting} 
+            className="flex-1 bg-red-600 hover:bg-red-700 disabled:opacity-50 text-white font-semibold py-2.5 rounded-lg text-sm transition-colors shadow-lg shadow-red-100"
+          >
             {submitting ? "Recording..." : "⚠️ Record Damage"}
           </button>
         </div>
@@ -717,7 +734,7 @@ export default function Inventory() {
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-slate-100">
-                  {["ID", "Product", "Qty", "Unit Cost", "Total Loss", "Description", "Employee", "Manager"].map(h => (
+                  {["ID", "Date", "Product", "Qty", "Unit Cost", "Total Loss", "Description", "Employee", "Manager"].map(h => (
                     <th key={h} className="text-left px-4 py-3 text-[10px] font-bold text-slate-400 uppercase tracking-widest">{h}</th>
                   ))}
                 </tr>
@@ -728,6 +745,7 @@ export default function Inventory() {
                 ) : warehouseDamages.map(d => (
                   <tr key={d.damage_ID} className="hover:bg-slate-50">
                     <td className="px-4 py-3 font-bold text-slate-500 text-xs">DMG-{d.damage_ID}</td>
+                    <td className="px-4 py-3 font-medium text-slate-700">{d.damage_date || "n/a"}</td>
                     <td className="px-4 py-3 font-medium text-slate-700">{d.product_name}</td>
                     <td className="px-4 py-3 text-red-600 font-bold">{d.damage_quantity}</td>
                     <td className="px-4 py-3 text-slate-500">₱{Number(d.damage_amount || 0).toLocaleString()}</td>
