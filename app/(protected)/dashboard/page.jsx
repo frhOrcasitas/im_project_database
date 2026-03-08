@@ -122,7 +122,8 @@ export default function Dashboard() {
                   <th className="text-left pb-2 text-slate-500 font-medium">Customer</th>
                   <th className="text-left pb-2 text-slate-500 font-medium">Date</th>
                   <th className="text-right pb-2 text-slate-500 font-medium">Amount</th>
-                  <th className="text-left pb-2 text-slate-500 font-medium pl-4">Status</th>
+                  <th className="text-center pb-2 text-slate-500 font-medium pl-4">Delivery Status</th>
+                  <th className="text-center pb-2 text-slate-500 font-medium pl-4">Payment Status</th>
                 </tr>
               </thead>
               <tbody>
@@ -132,7 +133,8 @@ export default function Dashboard() {
                     <td className="py-3 text-slate-700">{row.client_name}</td>
                     <td className="py-3 text-slate-500">{new Date(row.sales_createdAt).toLocaleDateString()}</td> 
                     <td className="py-3 text-right font-semibold text-slate-800">₱{row.sales_totalAmount.toLocaleString()}</td>
-                    <td className="py-3 pl-4">{statusBadge(row.sales_status)}</td>
+                    <td className="py-3 pl-4 text-center">{statusBadge(row.sales_status)}</td>
+                    <td className="py-3 pl-4 text-center">{statusBadge(row.sales_paymentStatus || "Unpaid")}</td>
                   </tr>
                 ))}
               </tbody>

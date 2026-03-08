@@ -67,7 +67,7 @@ function WarehouseDamageModal({ products, onClose, onSuccess }) {
   const inputCls = "w-full border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-red-400 bg-white";
 
   return (
-    <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+    <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-[9999] p-4">
       <div className="bg-white rounded-2xl w-full max-w-xl shadow-xl max-h-[90vh] flex flex-col overflow-hidden">
         <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between shrink-0">
           <div>
@@ -160,36 +160,34 @@ function DeliveryDamageModal({ onClose, onSuccess, initialShipmentID = "" }) {
   const [error,       setError]       = useState("");
   const [loaded,      setLoaded]      = useState(false);
 
-  // Auto-load if initialShipmentID provided
   useEffect(() => {
-    if (initialShipmentID) loadShipment(String(initialShipmentID));
+    if (initialShipmentID) doLoad(String(initialShipmentID));
   }, []);
 
-  const loadShipment = async (idOverride) => {
-    const id = idOverride ?? shipmentID;
+  const doLoad = async (id) => {
     if (!id) return setError("Enter a shipment ID.");
-    setLoadingShip(true);
-    setError("");
-    setLoaded(false);
+    setLoadingShip(true); setError(""); setLoaded(false);
     try {
       const res  = await fetch(`/api/shipment/${id}`);
       const data = await res.json();
       if (!res.ok || !data.items?.length) throw new Error("Shipment not found or has no items.");
       setItems(data.items.map(i => ({
-        productLine_ID:     i.productLine_ID,
-        product_name:       i.product_name,
-        shipped_qty:        i.product_quantity,
-        damage_quantity:    1,
-        damage_description: "",
-        include:            false,
+        productLine_ID: i.productLine_ID, 
+        product_name: i.product_name, 
+        product_ID: i.product_ID,
+        shipped_qty: i.product_quantity, 
+        damage_quantity: 1, 
+        damage_description: "", 
+        include: false,
       })));
       setLoaded(true);
-    } catch (err) {
-      setError(err.message);
-      setItems([]);
-      setLoaded(false);
-    } finally {
-      setLoadingShip(false);
+    } catch (err) { 
+      setError(err.message); 
+      setItems([]); 
+      setLoaded(false); 
+    }
+    finally { 
+      setLoadingShip(false); 
     }
   };
 
@@ -199,128 +197,172 @@ function DeliveryDamageModal({ onClose, onSuccess, initialShipmentID = "" }) {
   const handleSubmit = async () => {
     const selected = items.filter(i => i.include);
     if (!selected.length) return setError("Check at least one damaged item.");
+    
     for (const s of selected) {
       if (Number(s.damage_quantity) < 1) return setError(`Qty must be ≥ 1 for "${s.product_name}".`);
       if (Number(s.damage_quantity) > s.shipped_qty) return setError(`Qty for "${s.product_name}" exceeds shipped qty (${s.shipped_qty}).`);
     }
 
-    setSubmitting(true);
+    setSubmitting(true); 
     setError("");
     try {
       const res = await fetch("/api/damage/during", {
-        method: "POST",
+        method: "POST", 
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          shipment_ID: Number(shipmentID),
+        body: JSON.stringify({ 
+          shipment_ID: Number(shipmentID), 
           items: selected.map(i => ({
-            productLine_ID:     i.productLine_ID,
-            damage_quantity:    Number(i.damage_quantity),
+            productLine_ID: i.productLine_ID, 
+            product_ID: i.product_ID,
+            damage_quantity: Number(i.damage_quantity),
             damage_description: i.damage_description || null,
-          })),
+          })) 
         }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error);
       onSuccess("Delivery damage recorded.");
       onClose();
-    } catch (err) {
-      setError(err.message);
-    } finally {
-      setSubmitting(false);
+    } catch (err) { 
+      setError(err.message); 
+    }
+    finally { 
+      setSubmitting(false); 
     }
   };
 
   const selectedCount = items.filter(i => i.include).length;
 
   return (
-    <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-2xl w-full max-w-xl shadow-xl max-h-[90vh] flex flex-col overflow-hidden">
-        <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between shrink-0">
+    <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-[9999] p-4" style={{ pointerEvents: 'auto' }}>
+      <div className="bg-white rounded-2xl w-full max-w-xl shadow-xl max-h-[90vh] flex flex-col overflow-hidden" style={{ pointerEvents: 'auto' }}>
+        {/* HEADER */}
+        <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between shrink-0" style={{ pointerEvents: 'auto' }}>
           <div>
             <h2 className="text-lg font-bold text-slate-800">🚚 Record Delivery Damage</h2>
             <p className="text-xs text-slate-400 mt-0.5">
               {loaded ? `SHP-${shipmentID} · ${items.length} item(s) · ${selectedCount} selected` : "Link damage to a specific shipment"}
             </p>
           </div>
-          <button onClick={onClose} className="text-slate-400 hover:text-slate-600 w-8 h-8 flex items-center justify-center rounded-lg hover:bg-slate-100">✕</button>
+          <button 
+            onClick={onClose} 
+            className="text-slate-400 hover:text-slate-600 w-8 h-8 flex items-center justify-center rounded-lg hover:bg-slate-100 flex-shrink-0"
+            style={{ pointerEvents: 'auto' }}
+          >
+            ✕
+          </button>
         </div>
 
-        <div className="overflow-y-auto flex-1 px-6 py-5 flex flex-col gap-4">
-          {/* Shipment lookup */}
-          <div>
+        {/* BODY - SCROLLABLE */}
+        <div className="overflow-y-auto flex-1 px-6 py-5 flex flex-col gap-4" style={{ pointerEvents: 'auto' }}>
+          
+          {/* SHIPMENT ID INPUT */}
+          <div style={{ pointerEvents: 'auto' }}>
             <label className="text-xs font-bold text-slate-500 uppercase tracking-wide block mb-1.5">
               Shipment ID <span className="text-red-400">*</span>
             </label>
-            <div className="flex gap-2">
-              <input
-                type="number" min="1" placeholder="e.g. 9"
-                className="flex-1 border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-orange-400"
+            <div className="flex gap-2" style={{ pointerEvents: 'auto' }}>
+              <input 
+                type="number" 
+                min="1" 
+                placeholder="e.g. 9"
+                className="flex-1 border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-800 bg-white focus:outline-none focus:ring-2 focus:ring-orange-400"
                 value={shipmentID}
                 onChange={e => { setShipmentID(e.target.value); setItems([]); setLoaded(false); setError(""); }}
-                onKeyDown={e => e.key === "Enter" && loadShipment()}
+                onKeyDown={e => e.key === "Enter" && doLoad(shipmentID)}
+                style={{ pointerEvents: 'auto' }}
               />
-              <button
-                onClick={() => loadShipment()}
+              <button 
+                onClick={() => doLoad(shipmentID)} 
                 disabled={loadingShip || !shipmentID}
                 className="bg-slate-800 hover:bg-slate-900 disabled:opacity-50 text-white text-sm font-semibold px-4 py-2 rounded-lg min-w-[72px]"
+                style={{ pointerEvents: 'auto' }}
               >
                 {loadingShip ? "..." : loaded ? "Reload" : "Load"}
               </button>
             </div>
           </div>
 
-          {/* Items */}
+          {/* ITEMS LIST */}
           {items.length > 0 && (
-            <div>
+            <div style={{ pointerEvents: 'auto' }}>
               <div className="flex items-center justify-between mb-2">
                 <label className="text-xs font-bold text-slate-500 uppercase tracking-wide">
                   Select Damaged Items <span className="text-red-400">*</span>
                 </label>
                 <span className="text-xs text-slate-400">{selectedCount} / {items.length} selected</span>
               </div>
-              <div className="flex flex-col gap-2">
+
+              <div className="flex flex-col gap-2" style={{ pointerEvents: 'auto' }}>
                 {items.map((item, idx) => (
-                  <div key={idx}
-                    className={`border rounded-xl p-3 transition-colors ${item.include ? "border-orange-300 bg-orange-50" : "border-slate-200 bg-slate-50"}`}>
-                    {/* Row 1: checkbox · name · qty input */}
-                    <div className="flex items-center gap-3">
-                      <button
-                        type="button"
-                        onClick={() => updateItem(idx, "include", !item.include)}
-                        className={`w-5 h-5 rounded border-2 flex items-center justify-center shrink-0 transition-colors ${
-                          item.include ? "bg-orange-500 border-orange-500" : "bg-white border-slate-300 hover:border-orange-400"
-                        }`}
-                      >
-                        {item.include && <span className="text-white text-xs font-bold leading-none">✓</span>}
-                      </button>
-
-                      <div className="flex-1 min-w-0">
-                        <span className="text-sm font-semibold text-slate-700 block truncate">{item.product_name}</span>
-                        <span className="text-[10px] text-slate-400">Shipped: {item.shipped_qty}</span>
-                      </div>
-
-                      <div className="flex items-center gap-1.5 shrink-0">
-                        <span className="text-xs text-slate-400">Damaged:</span>
-                        <input
-                          type="number" min="1" max={item.shipped_qty}
-                          className={`w-20 border rounded-lg px-2 py-1.5 text-sm text-center font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-orange-400 ${
-                            item.include ? "border-orange-200 bg-white" : "border-slate-200 bg-slate-100 text-slate-400"
+                  <div
+                    key={idx}
+                    onClick={() => updateItem(idx, "include", !item.include)}
+                    className={`border rounded-xl p-3 transition-all cursor-pointer hover:shadow-sm ${
+                      item.include
+                        ? "border-orange-300 bg-orange-50"
+                        : "border-slate-200 bg-slate-50 hover:bg-orange-50"
+                    }`}
+                  >
+                    
+                    {/* Product Header */}
+                    <div className="flex justify-between items-center">
+                      <div className="flex items-center gap-3">
+                        
+                        {/* Checkbox */}
+                        <div
+                          className={`w-5 h-5 flex items-center justify-center rounded border ${
+                            item.include
+                              ? "bg-orange-500 border-orange-500 text-white"
+                              : "border-slate-300 bg-white"
                           }`}
-                          value={item.damage_quantity}
-                          onChange={e => updateItem(idx, "damage_quantity", e.target.value)}
-                        />
+                        >
+                          {item.include && "✓"}
+                        </div>
+
+                        {/* Product Name */}
+                        <div>
+                          <p className="font-semibold text-slate-800">
+                            {item.product_name}
+                          </p>
+                          <p className="text-xs text-slate-500">
+                            Shipped: {item.shipped_qty}
+                          </p>
+                        </div>
                       </div>
+
+                      {/* Damage Quantity */}
+                      {item.include && (
+                        <input
+                          type="number"
+                          min="1"
+                          max={item.shipped_qty}
+                          value={item.damage_quantity}
+                          onClick={(e) => e.stopPropagation()}
+                          onChange={(e) =>
+                            updateItem(
+                              idx,
+                              "damage_quantity",
+                              parseInt(e.target.value) || 1
+                            )
+                          }
+                          className="w-20 border border-orange-200 rounded-lg px-2 py-1.5 text-sm text-center font-bold text-slate-800 bg-white focus:outline-none focus:ring-2 focus:ring-orange-400"
+                        />
+                      )}
                     </div>
 
-                    {/* Row 2: description — only when checked */}
+                    {/* Description */}
                     {item.include && (
-                      <div className="mt-2 pl-8">
+                      <div className="mt-3">
                         <input
                           type="text"
-                          className="w-full border border-orange-200 rounded-lg px-3 py-1.5 text-sm text-slate-800 bg-white focus:outline-none focus:ring-2 focus:ring-orange-400 placeholder:text-slate-300"
-                          placeholder="Description of damage (optional)"
-                          value={item.damage_description}
-                          onChange={e => updateItem(idx, "damage_description", e.target.value)}
+                          placeholder="Optional damage description"
+                          value={item.damage_description || ""}
+                          onClick={(e) => e.stopPropagation()}
+                          onChange={(e) =>
+                            updateItem(idx, "damage_description", e.target.value)
+                          }
+                          className="w-full border border-orange-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400"
                         />
                       </div>
                     )}
@@ -339,14 +381,20 @@ function DeliveryDamageModal({ onClose, onSuccess, initialShipmentID = "" }) {
           )}
         </div>
 
-        <div className="px-6 py-4 border-t border-slate-100 flex gap-3 shrink-0">
-          <button onClick={onClose} className="flex-1 border border-slate-200 text-slate-600 font-medium py-2.5 rounded-lg text-sm hover:bg-slate-50">
+        {/* FOOTER */}
+        <div className="px-6 py-4 border-t border-slate-100 flex gap-3 shrink-0" style={{ pointerEvents: 'auto' }}>
+          <button 
+            onClick={onClose} 
+            className="flex-1 border border-slate-200 text-slate-600 font-medium py-2.5 rounded-lg text-sm hover:bg-slate-50"
+            style={{ pointerEvents: 'auto' }}
+          >
             Cancel
           </button>
-          <button
-            onClick={handleSubmit}
+          <button 
+            onClick={handleSubmit} 
             disabled={submitting || selectedCount === 0}
             className="flex-1 bg-orange-500 hover:bg-orange-600 disabled:opacity-40 disabled:cursor-not-allowed text-white font-semibold py-2.5 rounded-lg text-sm"
+            style={{ pointerEvents: 'auto' }}
           >
             {submitting ? "Recording..." : `⚠️ Record ${selectedCount > 0 ? `${selectedCount} Item${selectedCount > 1 ? "s" : ""}` : "Damage"}`}
           </button>
@@ -383,7 +431,7 @@ export default function Inventory() {
   const [toast,        setToast]        = useState(null);
 
   // Damage state
-  const [damageTab,          setDamageTab]          = useState("warehouse"); // "warehouse" | "delivery"
+  const [damageTab,          setDamageTab]          = useState("warehouse");
   const [warehouseDamages,   setWarehouseDamages]   = useState([]);
   const [deliveryDamages,    setDeliveryDamages]     = useState([]);
   const [damageLoading,      setDamageLoading]       = useState(true);
@@ -413,7 +461,6 @@ export default function Inventory() {
       ]);
       const [wData, dData] = await Promise.all([wRes.json(), dRes.json()]);
       setWarehouseDamages(Array.isArray(wData) ? wData : []);
-      // Normalize shipment_id → shipment_ID regardless of what MySQL returns
       setDeliveryDamages(Array.isArray(dData) ? dData.map(d => ({
         ...d,
         shipment_ID: d.shipment_ID ?? d.shipment_id ?? null,
@@ -726,11 +773,11 @@ export default function Inventory() {
         </div>
       </div>
 
-      {/* ── Modals ────────────────────────────────────────────────────────── */}
+      {/* ── Modals ────────────────────────────────────────────────────��───── */}
 
       {/* Add Product */}
       {isModalOpen && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[9999]">
           <div className="bg-white p-6 rounded-2xl w-full max-w-md shadow-xl">
             <h2 className="text-xl font-bold mb-4 text-black">Add New Product</h2>
             <form onSubmit={handleSubmit} className="flex flex-col gap-4">
@@ -759,7 +806,7 @@ export default function Inventory() {
 
       {/* Restock */}
       {restockItem && (
-        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50" onClick={() => setRestockItem(null)}>
+        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-[9999]" onClick={() => setRestockItem(null)}>
           <div className="bg-white p-6 rounded-xl shadow-xl max-w-sm w-[380px]" onClick={e => e.stopPropagation()}>
             <div className="flex justify-between items-center mb-3">
               <h2 className="text-lg font-bold text-slate-800">Restock Product</h2>
@@ -785,7 +832,7 @@ export default function Inventory() {
 
       {/* Edit Product */}
       {editItem && (
-        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50">
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-[9999]">
           <div className="bg-white p-6 rounded-2xl w-full max-w-md shadow-xl">
             <h2 className="text-xl font-bold mb-4 text-slate-800">Edit Product</h2>
             <form onSubmit={handleEditSubmit} className="flex flex-col gap-4">

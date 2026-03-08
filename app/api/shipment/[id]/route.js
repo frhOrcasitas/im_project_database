@@ -80,11 +80,9 @@ export async function GET(req, { params }) {
 
     // Items shipped
     const [items] = await pool.query(`
-      SELECT
-        sp.product_ID,
-        sp.product_quantity,
-        sp.productLine_ID,
-        p.product_name
+      SELECT sp.product_ID, sp.product_quantity, sp.productLine_ID,
+        p.product_name, p.product_unitPrice,
+        (sp.product_quantity * p.product_unitPrice) AS product_subtotal
       FROM tbl_shipment_productdetails sp
       JOIN tbl_product p ON sp.product_ID = p.product_ID
       WHERE sp.shipment_ID = ?

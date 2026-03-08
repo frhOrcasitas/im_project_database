@@ -17,20 +17,26 @@ export default function Sales() {
   const [searchCustomer, setSearchCustomer] = useState("");
   const [searchProduct, setSearchProduct] = useState("");
   const [orderItems, setOrderItems] = useState([]);
+
+  // quantities now stores { qty, price } per product_ID
   const [quantities, setQuantities] = useState({});
-  const [paymentType, setPaymentType] = useState("");
+
+  const [paymentType, setPaymentType] = useState("Cash");
   const [paymentAmount, setPaymentAmount] = useState(0);
   const [orderNotes, setOrderNotes] = useState("");
   const [deliveryAddress, setDeliveryAddress] = useState("");
   const [showCustomerDropdown, setShowCustomerDropdown] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  
-  
-  const isStep1Complete = !!selectedCustomer; // true if a customer is picked
-  const isStep2Complete = orderItems.length > 0; // true if items are added
-  const isStep3Complete = !!paymentType && paymentAmount >= 0; // true if payment is set
 
-  const DELIVERY_FEE = 100;
+  const [siNumber,  setSiNumber]  = useState("");
+  const [drNumber,  setDrNumber]  = useState("");
+  const [swsNumber, setSwsNumber] = useState("");
+
+  const isStep1Complete = !!selectedCustomer;
+  const isStep2Complete = orderItems.length > 0;
+  const isStep3Complete = !!paymentType && paymentAmount >= 0;
+
+  const DELIVERY_FEE = 0;
 
   useEffect(() => {
     if (isStep1Complete && step === 1) setStep(2);
@@ -45,11 +51,10 @@ export default function Sales() {
         ]);
         const prodData = await prodRes.json();
         const custData = await custRes.json();
-
-        setProducts(prodData);
-        setCustomers(custData);
+        setProducts(Array.isArray(prodData) ? prodData : []);
+        setCustomers(Array.isArray(custData) ? custData : []);
       } catch (err) {
-        console.error("Failed to fetch data: ", err);
+        console.error("Failed to fetch data:", err);
       } finally {
         setLoading(false);
       }
@@ -57,46 +62,64 @@ export default function Sales() {
     fetchData();
   }, []);
 
+  // Helper: get qty and price for a product card
+  const getQty   = (pid) => quantities[pid]?.qty   ?? 1;
+  const getPrice = (pid, defaultPrice) => quantities[pid]?.price ?? defaultPrice;
+
+  const setQty = (pid, val) =>
+    setQuantities(q => ({ ...q, [pid]: { ...q[pid], qty: parseInt(val) || 1 } }));
+
+  const setPrice = (pid, val, defaultPrice) =>
+    setQuantities(q => ({
+      ...q,
+      [pid]: { qty: q[pid]?.qty ?? 1, price: parseFloat(val) || defaultPrice }
+    }));
+
   const handleCompleteSale = async () => {
-      if (!selectedCustomer) return alert("Please select a customer.");
-      if (orderItems.length === 0) return alert("Order is empty.");
-      if (!paymentType) return alert("Please select a payment type.");
-      if (isSubmitting) return;
+    if (!selectedCustomer) return alert("Please select a customer.");
+    if (orderItems.length === 0) return alert("Order is empty.");
+    if (!paymentType) return alert("Please select a payment type.");
+    if (isSubmitting) return;
 
-      // --- ADD THIS LINE HERE ---
-      const currentEmployeeID = currentEmployee.id; // Use 1 for testing, or your actual admin ID
+    const salePayload = {
+      client_ID:       selectedCustomer.client_ID,
+      employee_ID:     currentEmployee.id,
+      sales_notes:     orderNotes,
+      sales_SINumber:  siNumber  || null,
+      sales_DRNumber:  drNumber  || null,
+      sales_SWSNumber: swsNumber || null,
+      items: orderItems.map(item => ({
+        productLine_ID: item.product_ID,
+        quantity:       item.qty,
+        unitPrice:      item.price,
+      })),
+      payment: parseFloat(paymentAmount) > 0 ? {
+        payment_amount: parseFloat(paymentAmount),
+        payment_type:   paymentType,
+        employee_ID:    currentEmployee.id,
+      } : null,
+    };
 
-      const salePayload = {
-        client_ID: selectedCustomer.client_ID,
-        employee_ID: currentEmployeeID, 
-        sales_notes: orderNotes, // Added this to capture your notes state
-        items: orderItems.map(item => ({
-          productLine_ID: item.product_ID, 
-          quantity: item.qty,
-          unitPrice: item.price
-        })),
-        payment: {
-          // Changed amountPaid to paymentAmount to match your state variable
-          payment_amount: parseFloat(paymentAmount) || 0, 
-          payment_type: paymentType,
-          employee_ID: currentEmployee.id
-        }
-      };
-
-      setIsSubmitting(true);
-
+    setIsSubmitting(true);
     try {
       const res = await fetch("/api/sales", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(salePayload),
       });
-
       const result = await res.json();
-
       if (res.ok) {
         alert("Sale created successfully!");
-        router.push(`/sales/${result.saleId || ''}`);
+        // Reset
+        setSelectedCustomer(null);
+        setSearchCustomer("");
+        setOrderItems([]);
+        setQuantities({});
+        setPaymentAmount(0);
+        setOrderNotes("");
+        setSiNumber(""); setDrNumber(""); setSwsNumber("");
+        setStep(1);
+        setIsSubmitting(false);
       } else {
         alert(`Error: ${result.error}`);
         setIsSubmitting(false);
@@ -133,24 +156,27 @@ export default function Sales() {
   };
 
   const handleAddToOrder = (product) => {
-    const qty = quantities[product.product_ID] || 1;
-    // We keep the price flexible here so it can be edited in the summary if needed
-    const priceToUse = product.product_unitPrice; 
+    const qty   = getQty(product.product_ID);
+    const price = getPrice(product.product_ID, product.product_unitPrice);
+
+    if (qty > product.product_stockQty) {
+      alert(`Insufficient stock! Only ${product.product_stockQty} remaining.`);
+      return;
+    }
 
     const existing = orderItems.find((i) => i.product_ID === product.product_ID);
-
     if (existing) {
-      setOrderItems(
-        orderItems.map((i) =>
-          i.product_ID === product.product_ID ? { ...i, qty: i.qty + qty } : i
-        )
-      );
+      setOrderItems(orderItems.map((i) =>
+        i.product_ID === product.product_ID
+          ? { ...i, qty: i.qty + qty, price }
+          : i
+      ));
     } else {
       setOrderItems([...orderItems, {
         product_ID: product.product_ID,
-        name: product.product_name,
-        price: priceToUse, // This maps to your unitPrice in the payload
-        qty
+        name:       product.product_name,
+        price,
+        qty,
       }]);
     }
   };
@@ -160,14 +186,15 @@ export default function Sales() {
   };
 
   const subtotal = orderItems.reduce((sum, item) => sum + item.price * item.qty, 0);
-  const total = subtotal + DELIVERY_FEE;
-  
+  const total    = subtotal + DELIVERY_FEE;
+  const balance  = Math.max(0, total - parseFloat(paymentAmount || 0));
+
   const formatCurrency = (amount) =>
-    `₱${amount.toLocaleString("en-PH", { minimumFractionDigits: 2 })}`;
+    `₱${Number(amount).toLocaleString("en-PH", { minimumFractionDigits: 2 })}`;
 
   const steps = [
-    { num: 1, label: "1. Customer Info", complete: isStep1Complete },
-    { num: 2, label: "2. Select Products", complete: isStep2Complete },
+    { num: 1, label: "1. Customer Info",    complete: isStep1Complete },
+    { num: 2, label: "2. Select Products",  complete: isStep2Complete },
     { num: 3, label: "3. Review & Payment", complete: isStep3Complete },
   ];
 
@@ -178,8 +205,8 @@ export default function Sales() {
       <div className="flex justify-between items-center mb-5">
         <h1 className="text-3xl font-bold text-gray-900">Create New Sale / Order</h1>
         <div className="bg-blue-50 border border-blue-200 px-4 py-2 rounded-lg">
-            <p className="text-xs text-blue-600 font-bold uppercase tracking-tight">System Operator</p>
-            <p className="text-sm font-black text-blue-900">{currentEmployee.name} (ID: {currentEmployee.id})</p>
+          <p className="text-xs text-blue-600 font-bold uppercase tracking-tight">System Operator</p>
+          <p className="text-sm font-black text-blue-900">{currentEmployee.name} (ID: {currentEmployee.id})</p>
         </div>
       </div>
 
@@ -199,19 +226,18 @@ export default function Sales() {
             >
               {s.label} {s.complete && "✓"}
             </button>
-            {idx < steps.length - 1 && (
-              <span className="text-gray-300 text-lg">→</span>
-            )}
+            {idx < steps.length - 1 && <span className="text-gray-300 text-lg">→</span>}
           </div>
         ))}
       </div>
 
       <div className="flex gap-5">
         <div className="flex-1 flex flex-col gap-5">
+
           {/* STEP 1: CUSTOMER INFO */}
           <div className={getSectionClass(1, isStep1Complete)} onClick={() => setStep(1)}>
             <h2 className="text-lg font-bold text-gray-900 mb-4 flex items-center gap-2">
-                1. Customer Information {isStep1Complete && <span className="text-green-600">✓</span>}
+              1. Customer Information {isStep1Complete && <span className="text-green-600">✓</span>}
             </h2>
             <div className="grid grid-cols-2 gap-4">
               <div className="relative">
@@ -231,7 +257,8 @@ export default function Sales() {
                 {showCustomerDropdown && filteredCustomers.length > 0 && (
                   <div className="absolute z-20 bg-white border border-gray-300 rounded shadow-lg w-full mt-1 max-h-60 overflow-y-auto">
                     {filteredCustomers.map((c) => (
-                      <div key={c.client_ID} onClick={() => handleSelectCustomer(c)} className="px-3 py-2 text-sm text-gray-900 hover:bg-blue-600 hover:text-white cursor-pointer border-b last:border-0">
+                      <div key={c.client_ID} onClick={() => handleSelectCustomer(c)}
+                        className="px-3 py-2 text-sm text-gray-900 hover:bg-blue-600 hover:text-white cursor-pointer border-b last:border-0">
                         {c.client_name}
                       </div>
                     ))}
@@ -240,42 +267,133 @@ export default function Sales() {
               </div>
               <div>
                 <label className="block text-sm font-bold text-gray-800 mb-1">Contact Person</label>
-                <input type="text" value={selectedCustomer?.contactPerson || ""} readOnly className="w-full border border-gray-300 rounded px-3 py-2 text-sm bg-gray-100" />
+                <input type="text" value={selectedCustomer?.contactPerson || ""} readOnly
+                  className="w-full border border-gray-300 rounded px-3 py-2 text-sm bg-gray-100" />
               </div>
             </div>
             <div className="grid grid-cols-2 gap-4 mt-4">
               <div>
                 <label className="block text-sm font-bold text-gray-800 mb-1">Contact Number</label>
-                <input type="text" value={selectedCustomer?.client_contactNumber || ""} readOnly className="w-full border border-gray-300 rounded px-3 py-2 text-sm bg-gray-100" />
+                <input type="text" value={selectedCustomer?.client_contactNumber || ""} readOnly
+                  className="w-full border border-gray-300 rounded px-3 py-2 text-sm bg-gray-100" />
               </div>
               <div>
                 <label className="block text-sm font-bold text-gray-800 mb-1">Outstanding Balance</label>
-                <input type="text" value={selectedCustomer ? formatCurrency(selectedCustomer.client_outstandingbalance || 0) : ""} readOnly className={`w-full border border-gray-300 rounded px-3 py-2 text-sm bg-gray-100 font-bold ${selectedCustomer?.client_outstandingbalance > 0 ? "text-red-600" : "text-green-700"}`} />
+                <input type="text"
+                  value={selectedCustomer ? formatCurrency(selectedCustomer.client_outstandingbalance || 0) : ""}
+                  readOnly
+                  className={`w-full border border-gray-300 rounded px-3 py-2 text-sm bg-gray-100 font-bold ${
+                    selectedCustomer?.client_outstandingbalance > 0 ? "text-red-600" : "text-green-700"
+                  }`} />
               </div>
             </div>
             <div className="mt-4">
               <label className="block text-sm font-bold text-gray-800 mb-1">Delivery Address</label>
-              <textarea value={deliveryAddress} onChange={(e) => setDeliveryAddress(e.target.value)} rows={2} className="w-full border border-gray-400 rounded px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 resize-none" />
+              <textarea value={deliveryAddress} onChange={(e) => setDeliveryAddress(e.target.value)}
+                rows={2} className="w-full border border-gray-400 rounded px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 resize-none" />
+            </div>
+
+            {/* Receipt Numbers */}
+            <div className="grid grid-cols-3 gap-3 mt-4 pt-4 border-t border-gray-100">
+              <div>
+                <label className="block text-sm font-bold text-gray-800 mb-1">SI Number</label>
+                <input type="number" placeholder="SI #" value={siNumber}
+                  onChange={e => setSiNumber(e.target.value)}
+                  className="w-full border border-gray-400 rounded px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500" />
+              </div>
+              <div>
+                <label className="block text-sm font-bold text-gray-800 mb-1">DR Number</label>
+                <input type="number" placeholder="DR #" value={drNumber}
+                  onChange={e => setDrNumber(e.target.value)}
+                  className="w-full border border-gray-400 rounded px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500" />
+              </div>
+              <div>
+                <label className="block text-sm font-bold text-gray-800 mb-1">SWS Number</label>
+                <input type="number" placeholder="SWS #" value={swsNumber}
+                  onChange={e => setSwsNumber(e.target.value)}
+                  className="w-full border border-gray-400 rounded px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500" />
+              </div>
             </div>
           </div>
 
           {/* STEP 2: SELECT PRODUCTS */}
           <div className={getSectionClass(2, isStep2Complete)} onClick={() => setStep(2)}>
             <h2 className="text-lg font-bold text-gray-900 mb-4 flex items-center gap-2">
-                2. Select Products {isStep2Complete && <span className="text-green-600">✓</span>}
+              2. Select Products {isStep2Complete && <span className="text-green-600">✓</span>}
             </h2>
-            <input type="text" value={searchProduct} onChange={(e) => setSearchProduct(e.target.value)} placeholder="Type product name or code..." className="w-full border border-gray-400 rounded px-3 py-2 text-sm mb-4" />
+            <input type="text" value={searchProduct} onChange={(e) => setSearchProduct(e.target.value)}
+              placeholder="Type product name or code..."
+              className="w-full border border-gray-400 rounded px-3 py-2 text-sm mb-4" />
+
             <div className="grid grid-cols-3 gap-3">
-              {filteredProducts.map((product) => (
-                <div key={product.product_ID} className={`border-2 rounded-lg p-3 ${product.status === "in_stock" ? "border-green-200 bg-green-50" : "border-gray-200 bg-white"}`}>
-                  <p className="text-sm font-bold text-gray-900 mb-1">{product.product_name}</p>
-                  <p className="text-lg font-black text-blue-700">{formatCurrency(product.product_unitPrice)}</p>
-                  <div className="mt-2">
-                    <input type="number" min={1} value={quantities[product.product_ID] || 1} onChange={(e) => setQuantities({ ...quantities, [product.product_ID]: parseInt(e.target.value) || 1 })} className="w-full border border-gray-400 rounded px-2 py-1 text-sm font-bold mb-2" />
-                    <button onClick={(e) => { e.stopPropagation(); handleAddToOrder(product); }} className="w-full bg-green-700 text-white text-xs font-bold py-2 rounded hover:bg-green-800 uppercase tracking-wider">Add to Order</button>
+              {filteredProducts.map((product) => {
+                const pid        = product.product_ID;
+                const outOfStock = product.product_stockQty <= 0;
+                const lowStock   = !outOfStock && product.product_stockQty <= (product.product_reorderPoint || 5);
+                const cardPrice  = getPrice(pid, product.product_unitPrice);
+                const cardQty    = getQty(pid);
+
+                return (
+                  <div key={pid}
+                    className={`border-2 rounded-lg p-3 ${
+                      outOfStock ? "border-red-200 bg-red-50"
+                      : lowStock  ? "border-amber-200 bg-amber-50"
+                      : "border-green-200 bg-green-50"
+                    }`}>
+
+                    <p className="text-sm font-bold text-gray-900 mb-2">{product.product_name}</p>
+
+                    {/* Editable unit price */}
+                    <div className="mb-2">
+                      <label className="text-[10px] uppercase font-bold text-gray-500 block mb-0.5">
+                        Unit Price (editable)
+                      </label>
+                      <div className="relative">
+                        <span className="absolute left-2 top-1.5 text-blue-700 font-bold text-sm">₱</span>
+                        <input
+                          type="number"
+                          step="0.01"
+                          value={cardPrice}
+                          onChange={(e) => setPrice(pid, e.target.value, product.product_unitPrice)}
+                          onClick={(e) => e.stopPropagation()}
+                          className="w-full border border-blue-200 rounded pl-6 pr-2 py-1 text-sm font-black text-blue-700 bg-white focus:outline-none focus:border-blue-500"
+                          disabled={outOfStock}
+                        />
+                      </div>
+                    </div>
+
+                    {/* Stock remaining */}
+                    <div className="flex items-center gap-1.5 mb-2">
+                      <span className="text-xs text-gray-500">Stock:</span>
+                      <span className={`text-xs font-bold ${outOfStock ? "text-red-600" : lowStock ? "text-amber-600" : "text-green-700"}`}>
+                        {product.product_stockQty} {product.product_unit || ""}
+                      </span>
+                      {outOfStock && <span className="text-[10px] font-bold bg-red-100 text-red-700 px-1.5 py-0.5 rounded-full">Out</span>}
+                      {lowStock   && <span className="text-[10px] font-bold bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded-full">Low</span>}
+                    </div>
+
+                    {/* Quantity + Add button */}
+                    <div>
+                      <input
+                        type="number"
+                        min={1}
+                        max={product.product_stockQty || undefined}
+                        value={cardQty}
+                        onChange={(e) => { e.stopPropagation(); setQty(pid, e.target.value); }}
+                        onClick={(e) => e.stopPropagation()}
+                        className="w-full border border-gray-400 rounded px-2 py-1 text-sm font-bold mb-2"
+                        disabled={outOfStock}
+                      />
+                      <button
+                        onClick={(e) => { e.stopPropagation(); handleAddToOrder(product); }}
+                        disabled={outOfStock}
+                        className="w-full bg-green-700 text-white text-xs font-bold py-2 rounded hover:bg-green-800 uppercase tracking-wider disabled:opacity-40 disabled:cursor-not-allowed">
+                        {outOfStock ? "Out of Stock" : "Add to Order"}
+                      </button>
+                    </div>
                   </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           </div>
         </div>
@@ -284,52 +402,85 @@ export default function Sales() {
         <div className="w-80 flex-shrink-0">
           <div className={`${getSectionClass(3, isStep3Complete)} sticky top-6`}>
             <h2 className="text-xl font-black text-gray-900 mb-4 border-b pb-2">Order Summary</h2>
+
             <div className="mb-3">
-                <label className="block text-sm font-bold text-gray-800 mb-1">Payment Type *</label>
-                <select value={paymentType} onChange={(e) => setPaymentType(e.target.value)} className="w-full border-2 border-gray-400 rounded px-3 py-2 text-sm font-bold text-gray-900 bg-white">
-                    <option value="">-- Select Type --</option>
-                    <option value="Cash">Cash</option>
-                    <option value="GCash">GCash</option>
-                    <option value="Bank Transfer">Bank Transfer</option>
-                    <option value="Check">Check</option>
-                </select>
+              <label className="block text-sm font-bold text-gray-800 mb-1">Payment Type *</label>
+              <select value={paymentType} onChange={(e) => setPaymentType(e.target.value)}
+                className="w-full border-2 border-gray-400 rounded px-3 py-2 text-sm font-bold text-gray-900 bg-white">
+                <option value="">-- Select Type --</option>
+                <option value="Cash">Cash</option>
+                <option value="GCash">GCash</option>
+                <option value="Bank Transfer">Bank Transfer</option>
+                <option value="Check">Check</option>
+              </select>
             </div>
+
+            <div className="mb-3">
+              <label className="block text-sm font-bold text-gray-800 mb-1">Amount Paid:</label>
+              <div className="relative">
+                <span className="absolute left-3 top-2 text-gray-900 font-bold text-sm">₱</span>
+                <input type="number" value={paymentAmount} onChange={(e) => setPaymentAmount(e.target.value)}
+                  className="w-full border-2 border-gray-400 rounded pl-7 pr-3 py-2 text-sm font-bold text-gray-900" />
+              </div>
+            </div>
+
             <div className="mb-4">
-                <label className="block text-sm font-bold text-gray-800 mb-1">Amount Paid:</label>
-                <div className="relative">
-                    <span className="absolute left-3 top-2 text-gray-900 font-bold text-sm">₱</span>
-                    <input type="number" value={paymentAmount} onChange={(e) => setPaymentAmount(e.target.value)} className="w-full border-2 border-gray-400 rounded pl-7 pr-3 py-2 text-sm font-bold text-gray-900" />
-                </div>
+              <label className="block text-sm font-bold text-gray-800 mb-1">Order Notes</label>
+              <textarea value={orderNotes} onChange={e => setOrderNotes(e.target.value)}
+                rows={2} placeholder="Optional notes..."
+                className="w-full border-2 border-gray-300 rounded px-3 py-2 text-sm text-gray-900 resize-none focus:ring-2 focus:ring-blue-500" />
             </div>
+
             <div className="max-h-60 overflow-y-auto mb-4 space-y-3">
-                {orderItems.map((item) => (
-                  <div key={`summary-${item.product_ID}`} className="flex justify-between items-start border-b border-gray-100 pb-2">
-                    <div className="text-sm">
-                      <p className="font-bold text-gray-900">{item.name}</p>
-                      <p className="text-gray-700 font-medium">{item.qty} x {item.price}</p>
-                    </div>
-                    <button onClick={() => handleRemoveItem(item.product_ID)} className="text-red-600 font-bold text-xs hover:underline">Remove</button>
+              {orderItems.map((item) => (
+                <div key={`summary-${item.product_ID}`}
+                  className="flex justify-between items-start border-b border-gray-100 pb-2">
+                  <div className="text-sm">
+                    <p className="font-bold text-gray-900">{item.name}</p>
+                    <p className="text-gray-700 font-medium">{item.qty} × {formatCurrency(item.price)}</p>
                   </div>
-                ))}
+                  <button onClick={() => handleRemoveItem(item.product_ID)}
+                    className="text-red-600 font-bold text-xs hover:underline">Remove</button>
+                </div>
+              ))}
+              {orderItems.length === 0 && (
+                <p className="text-xs text-gray-400 italic text-center py-4">No items added yet.</p>
+              )}
             </div>
+
             <div className="space-y-2 border-t-2 border-gray-100 pt-3">
-                <div className="flex justify-between text-gray-800 font-bold">
-                    <span>Subtotal:</span>
-                    <span>{formatCurrency(subtotal)}</span>
-                </div>
-                <div className="flex justify-between text-green-700 font-black text-xl pt-2">
-                    <span>Total:</span>
-                    <span>{formatCurrency(total)}</span>
-                </div>
+              <div className="flex justify-between text-gray-800 font-bold">
+                <span>Subtotal:</span>
+                <span>{formatCurrency(subtotal)}</span>
+              </div>
+              {parseFloat(paymentAmount) > 0 && (
+                <>
+                  <div className="flex justify-between text-gray-600 text-sm">
+                    <span>Amount Paid:</span>
+                    <span className="font-semibold text-green-700">{formatCurrency(paymentAmount)}</span>
+                  </div>
+                  <div className="flex justify-between text-sm">
+                    <span className="text-gray-600">Balance:</span>
+                    <span className={`font-bold ${balance > 0 ? "text-red-600" : "text-green-700"}`}>
+                      {formatCurrency(balance)}
+                    </span>
+                  </div>
+                </>
+              )}
+              <div className="flex justify-between text-green-700 font-black text-xl pt-2">
+                <span>Total:</span>
+                <span>{formatCurrency(total)}</span>
+              </div>
             </div>
+
             <div className="mt-4">
-                <button 
-                  onClick={handleCompleteSale} 
-                  disabled={isSubmitting || !isStep1Complete || !isStep2Complete}
-                  className="w-full bg-green-700 hover:bg-green-800 disabled:opacity-50 disabled:bg-gray-400 text-white py-3 rounded-lg font-black uppercase shadow-lg transition-all"
-                >
-                    {isSubmitting ? "Processing..." : "✓ Complete Sale"}
-                </button>
+              <button
+                onClick={handleCompleteSale}
+                disabled={isSubmitting || !isStep1Complete || !isStep2Complete}
+                className="w-full bg-green-700 hover:bg-green-800 disabled:opacity-50 disabled:bg-gray-400 text-white py-3 rounded-lg font-black uppercase shadow-lg transition-all"
+              >
+                {isSubmitting ? "Processing..." : "✓ Complete Sale"}
+              </button>
             </div>
           </div>
         </div>
