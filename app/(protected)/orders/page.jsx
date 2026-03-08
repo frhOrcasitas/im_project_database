@@ -2,6 +2,147 @@
 
 import { useState, useEffect } from "react";
 
+// ── Inline Delivery Damage Modal (also used from Shipment Detail) ─────────────
+function DeliveryDamageModal({ onClose, onSuccess, initialShipmentID = "" }) {
+  const [shipmentID,  setShipmentID]  = useState(String(initialShipmentID));
+  const [loadingShip, setLoadingShip] = useState(false);
+  const [items,       setItems]       = useState([]);
+  const [submitting,  setSubmitting]  = useState(false);
+  const [error,       setError]       = useState("");
+  const [loaded,      setLoaded]      = useState(false);
+
+  useEffect(() => {
+    if (initialShipmentID) doLoad(String(initialShipmentID));
+  }, []);
+
+  const doLoad = async (id) => {
+    if (!id) return setError("Enter a shipment ID.");
+    setLoadingShip(true); setError(""); setLoaded(false);
+    try {
+      const res  = await fetch(`/api/shipment/${id}`);
+      const data = await res.json();
+      if (!res.ok || !data.items?.length) throw new Error("Shipment not found or has no items.");
+      setItems(data.items.map(i => ({
+        productLine_ID: i.productLine_ID, product_name: i.product_name,
+        shipped_qty: i.product_quantity, damage_quantity: 1, damage_description: "", include: false,
+      })));
+      setLoaded(true);
+    } catch (err) { setError(err.message); setItems([]); }
+    finally { setLoadingShip(false); }
+  };
+
+  const updateItem = (idx, key, val) =>
+    setItems(prev => prev.map((item, j) => j === idx ? { ...item, [key]: val } : item));
+
+  const handleSubmit = async () => {
+    const selected = items.filter(i => i.include);
+    if (!selected.length) return setError("Check at least one damaged item.");
+    setSubmitting(true); setError("");
+    try {
+      const res = await fetch("/api/damage/during", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ shipment_ID: Number(shipmentID), items: selected.map(i => ({
+          productLine_ID: i.productLine_ID, damage_quantity: Number(i.damage_quantity),
+          damage_description: i.damage_description || null,
+        })) }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error);
+      onSuccess("Delivery damage recorded.");
+      onClose();
+    } catch (err) { setError(err.message); }
+    finally { setSubmitting(false); }
+  };
+
+  const selectedCount = items.filter(i => i.include).length;
+
+  return (
+    <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-[60] p-4">
+      <div className="bg-white rounded-2xl w-full max-w-xl shadow-xl max-h-[90vh] flex flex-col overflow-hidden">
+        <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between shrink-0">
+          <div>
+            <h2 className="text-lg font-bold text-slate-800">🚚 Record Delivery Damage</h2>
+            <p className="text-xs text-slate-400 mt-0.5">
+              {loaded ? `SHP-${shipmentID} · ${items.length} item(s) · ${selectedCount} selected` : "Link damage to a specific shipment"}
+            </p>
+          </div>
+          <button onClick={onClose} className="text-slate-400 hover:text-slate-600 w-8 h-8 flex items-center justify-center rounded-lg hover:bg-slate-100">✕</button>
+        </div>
+        <div className="overflow-y-auto flex-1 px-6 py-5 flex flex-col gap-4">
+          <div>
+            <label className="text-xs font-bold text-slate-500 uppercase tracking-wide block mb-1.5">Shipment ID <span className="text-red-400">*</span></label>
+            <div className="flex gap-2">
+              <input type="number" min="1" placeholder="e.g. 9"
+                className="flex-1 border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-orange-400"
+                value={shipmentID}
+                onChange={e => { setShipmentID(e.target.value); setItems([]); setLoaded(false); setError(""); }}
+                onKeyDown={e => e.key === "Enter" && doLoad(shipmentID)}
+              />
+              <button onClick={() => doLoad(shipmentID)} disabled={loadingShip || !shipmentID}
+                className="bg-slate-800 hover:bg-slate-900 disabled:opacity-50 text-white text-sm font-semibold px-4 py-2 rounded-lg min-w-[72px]">
+                {loadingShip ? "..." : loaded ? "Reload" : "Load"}
+              </button>
+            </div>
+          </div>
+          {items.length > 0 && (
+            <div>
+              <div className="flex items-center justify-between mb-2">
+                <label className="text-xs font-bold text-slate-500 uppercase tracking-wide">Select Damaged Items <span className="text-red-400">*</span></label>
+                <span className="text-xs text-slate-400">{selectedCount} / {items.length} selected</span>
+              </div>
+              <div className="flex flex-col gap-2">
+                {items.map((item, idx) => (
+                  <div key={idx} className={`border rounded-xl p-3 transition-colors ${item.include ? "border-orange-300 bg-orange-50" : "border-slate-200 bg-slate-50"}`}>
+                    <div className="flex items-center gap-3">
+                      <button type="button" onClick={() => updateItem(idx, "include", !item.include)}
+                        className={`w-5 h-5 rounded border-2 flex items-center justify-center shrink-0 transition-colors ${item.include ? "bg-orange-500 border-orange-500" : "bg-white border-slate-300 hover:border-orange-400"}`}>
+                        {item.include && <span className="text-white text-xs font-bold leading-none">✓</span>}
+                      </button>
+                      <div className="flex-1 min-w-0">
+                        <span className="text-sm font-semibold text-slate-700 block truncate">{item.product_name}</span>
+                        <span className="text-[10px] text-slate-400">Shipped: {item.shipped_qty}</span>
+                      </div>
+                      <div className="flex items-center gap-1.5 shrink-0">
+                        <span className="text-xs text-slate-400">Damaged:</span>
+                        <input type="number" min="1" max={item.shipped_qty}
+                          className={`w-20 border rounded-lg px-2 py-1.5 text-sm text-center font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-orange-400 ${item.include ? "border-orange-200 bg-white" : "border-slate-200 bg-slate-100 text-slate-400"}`}
+                          value={item.damage_quantity}
+                          onChange={e => updateItem(idx, "damage_quantity", e.target.value)}
+                        />
+                      </div>
+                    </div>
+                    {item.include && (
+                      <div className="mt-2 pl-8">
+                        <input type="text"
+                          className="w-full border border-orange-200 rounded-lg px-3 py-1.5 text-sm text-slate-800 bg-white focus:outline-none focus:ring-2 focus:ring-orange-400 placeholder:text-slate-300"
+                          placeholder="Description of damage (optional)"
+                          value={item.damage_description}
+                          onChange={e => updateItem(idx, "damage_description", e.target.value)}
+                        />
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+          {!loaded && !loadingShip && !error && (
+            <p className="text-xs text-slate-400 italic text-center py-2">Enter a shipment ID above and click Load to see items.</p>
+          )}
+          {error && <div className="bg-red-50 border border-red-200 text-red-700 rounded-lg px-4 py-3 text-sm">{error}</div>}
+        </div>
+        <div className="px-6 py-4 border-t border-slate-100 flex gap-3 shrink-0">
+          <button onClick={onClose} className="flex-1 border border-slate-200 text-slate-600 font-medium py-2.5 rounded-lg text-sm hover:bg-slate-50">Cancel</button>
+          <button onClick={handleSubmit} disabled={submitting || selectedCount === 0}
+            className="flex-1 bg-orange-500 hover:bg-orange-600 disabled:opacity-40 disabled:cursor-not-allowed text-white font-semibold py-2.5 rounded-lg text-sm">
+            {submitting ? "Recording..." : `⚠️ Record ${selectedCount > 0 ? `${selectedCount} Item${selectedCount > 1 ? "s" : ""}` : "Damage"}`}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 const statusBadge = (status) => {
   const normalized = status?.toLowerCase();
   const map = {
@@ -273,6 +414,231 @@ function ShipModal({ order, onClose, onSuccess }) {
   );
 }
 
+// ─── New Sale Modal (comprehensive) ──────────────────────────────────────────
+const _inputCls = "w-full border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition";
+const _selectCls = _inputCls + " bg-white";
+
+function SaleField({ label, required, children }) {
+  return (
+    <div className="flex flex-col gap-1">
+      <label className="text-xs font-semibold text-slate-500 uppercase tracking-wide">
+        {label} {required && <span className="text-red-400">*</span>}
+      </label>
+      {children}
+    </div>
+  );
+}
+
+function NewSaleModal({ open, onClose, onSuccess, clients, products }) {
+  const emptyItem = { productLine_ID: "", quantity: 1, unitPrice: "" };
+  const [form, setForm] = useState({
+    client_ID: "", employee_ID: "", sales_notes: "",
+    sales_SINumber: "", sales_DRNumber: "", sales_SWSNumber: "",
+    items: [{ ...emptyItem }],
+    payment: { payment_type: "Cash", payment_amount: "", employee_ID: "" },
+  });
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+
+  if (!open) return null;
+
+  const setField = (key, val) => setForm(f => ({ ...f, [key]: val }));
+
+  const setItem = (i, key, val) => {
+    const items = [...form.items];
+    items[i] = { ...items[i], [key]: val };
+    if (key === "productLine_ID") {
+      const product = products.find(p => String(p.product_ID) === String(val));
+      if (product) items[i].unitPrice = product.product_unitPrice ?? "";
+    }
+    setForm(f => ({ ...f, items }));
+  };
+
+  const addItem = () => setForm(f => ({ ...f, items: [...f.items, { ...emptyItem }] }));
+  const removeItem = (i) => setForm(f => ({ ...f, items: f.items.filter((_, idx) => idx !== i) }));
+
+  const total = form.items.reduce(
+    (sum, it) => sum + (parseFloat(it.quantity) || 0) * (parseFloat(it.unitPrice) || 0), 0
+  );
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    setLoading(true);
+    setError("");
+    try {
+      const payload = {
+        ...form,
+        payment: form.payment.payment_amount
+          ? { ...form.payment, employee_ID: form.employee_ID }
+          : null,
+      };
+      const res = await fetch("/api/sales", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error);
+      onSuccess(`Sale #${data.sales_ID || data.saleId} created successfully!`);
+      onClose();
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+      <div className="bg-white rounded-2xl w-full max-w-2xl shadow-xl max-h-[90vh] flex flex-col overflow-hidden">
+        <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between shrink-0">
+          <h2 className="text-lg font-bold text-slate-800">+ New Sale / Order</h2>
+          <button onClick={onClose} className="text-slate-400 hover:text-slate-600 w-8 h-8 flex items-center justify-center rounded-lg hover:bg-slate-100">✕</button>
+        </div>
+
+        <div className="overflow-y-auto flex-1 px-6 py-5">
+          <form onSubmit={handleSubmit} className="flex flex-col gap-4">
+            {/* Client & Employee */}
+            <div className="grid grid-cols-2 gap-3">
+              <SaleField label="Client" required>
+                <select className={_selectCls} value={form.client_ID}
+                  onChange={e => setField("client_ID", e.target.value)} required>
+                  <option value="">Select client...</option>
+                  {clients.map(c => <option key={c.client_ID} value={c.client_ID}>{c.client_name}</option>)}
+                </select>
+              </SaleField>
+              <SaleField label="Employee ID" required>
+                <input className={_inputCls} type="number" placeholder="e.g. 3"
+                  value={form.employee_ID} onChange={e => setField("employee_ID", e.target.value)} required />
+              </SaleField>
+            </div>
+
+            {/* Receipt Numbers */}
+            <div className="grid grid-cols-3 gap-3">
+              <SaleField label="SI Number">
+                <input className={_inputCls} type="number" placeholder="SI #"
+                  value={form.sales_SINumber} onChange={e => setField("sales_SINumber", e.target.value)} />
+              </SaleField>
+              <SaleField label="DR Number">
+                <input className={_inputCls} type="number" placeholder="DR #"
+                  value={form.sales_DRNumber} onChange={e => setField("sales_DRNumber", e.target.value)} />
+              </SaleField>
+              <SaleField label="SWS Number">
+                <input className={_inputCls} type="number" placeholder="SWS #"
+                  value={form.sales_SWSNumber} onChange={e => setField("sales_SWSNumber", e.target.value)} />
+              </SaleField>
+            </div>
+
+            {/* Line Items */}
+            <div>
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Items <span className="text-red-400">*</span></span>
+                <button type="button" onClick={addItem} className="text-xs text-blue-600 hover:text-blue-800 font-medium">+ Add Item</button>
+              </div>
+              <div className="flex flex-col gap-2">
+                {form.items.map((item, i) => {
+                  const selProd = products.find(p => String(p.product_ID) === String(item.productLine_ID));
+                  return (
+                    <div key={i} className="grid grid-cols-12 gap-2 items-center bg-slate-50 rounded-lg p-2">
+                      <div className="col-span-5">
+                        <select className={_selectCls} value={item.productLine_ID}
+                          onChange={e => setItem(i, "productLine_ID", e.target.value)} required>
+                          <option value="">Product...</option>
+                          {products.map(p => (
+                            <option key={p.product_ID} value={p.product_ID} disabled={p.product_stockQty <= 0}>
+                              {p.product_name} {p.product_stockQty <= 0 ? "(Out)" : `(${p.product_stockQty})`}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                      <div className="col-span-2">
+                        <input className={_inputCls} type="number" min="1" placeholder="Qty"
+                          max={selProd?.product_stockQty || undefined}
+                          value={item.quantity} onChange={e => setItem(i, "quantity", e.target.value)} required />
+                      </div>
+                      <div className="col-span-3">
+                        <input className={_inputCls} type="number" step="0.01" placeholder="Unit Price"
+                          value={item.unitPrice} onChange={e => setItem(i, "unitPrice", e.target.value)} required />
+                      </div>
+                      <div className="col-span-1 text-xs text-slate-500 text-right font-semibold">
+                        ₱{((parseFloat(item.quantity) || 0) * (parseFloat(item.unitPrice) || 0)).toLocaleString()}
+                      </div>
+                      <div className="col-span-1 flex justify-end">
+                        {form.items.length > 1 && (
+                          <button type="button" onClick={() => removeItem(i)}
+                            className="text-red-400 hover:text-red-600 text-sm font-bold">✕</button>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Total */}
+            <div className="flex justify-between items-center bg-blue-50 rounded-lg px-4 py-2">
+              <span className="text-sm font-semibold text-slate-700">Total Amount</span>
+              <span className="text-lg font-bold text-blue-700">₱{total.toLocaleString("en-PH", { minimumFractionDigits: 2 })}</span>
+            </div>
+
+            {/* Payment */}
+            <div className="border border-slate-100 rounded-xl p-3 flex flex-col gap-3">
+              <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide">
+                Initial Payment <span className="text-slate-400 font-normal normal-case">(optional — leave blank to mark Unpaid)</span>
+              </p>
+              <div className="grid grid-cols-2 gap-3">
+                <SaleField label="Payment Type">
+                  <select className={_selectCls} value={form.payment.payment_type}
+                    onChange={e => setForm(f => ({ ...f, payment: { ...f.payment, payment_type: e.target.value } }))}>
+                    <option>Cash</option>
+                    <option>Check</option>
+                    <option>Bank Transfer</option>
+                    <option>GCash</option>
+                  </select>
+                </SaleField>
+                <SaleField label="Amount Paid">
+                  <input className={_inputCls} type="number" step="0.01"
+                    placeholder={`Max ₱${total.toLocaleString()}`}
+                    value={form.payment.payment_amount}
+                    onChange={e => setForm(f => ({ ...f, payment: { ...f.payment, payment_amount: e.target.value } }))} />
+                </SaleField>
+              </div>
+              {form.payment.payment_amount && (
+                <div className="text-xs text-slate-500">
+                  Balance after payment:{" "}
+                  <span className="font-semibold text-red-600">
+                    ₱{Math.max(0, total - parseFloat(form.payment.payment_amount || 0)).toLocaleString("en-PH", { minimumFractionDigits: 2 })}
+                  </span>
+                </div>
+              )}
+            </div>
+
+            {/* Notes */}
+            <SaleField label="Notes">
+              <textarea className={_inputCls + " resize-none"} rows={2}
+                placeholder="Optional delivery or order notes..."
+                value={form.sales_notes} onChange={e => setField("sales_notes", e.target.value)} />
+            </SaleField>
+
+            {error && <div className="bg-red-50 border border-red-200 text-red-700 rounded-lg px-4 py-3 text-sm">{error}</div>}
+
+            <div className="flex gap-3 pt-1">
+              <button type="button" onClick={onClose}
+                className="flex-1 border border-slate-200 text-slate-600 font-medium py-2 rounded-lg text-sm hover:bg-slate-50">
+                Cancel
+              </button>
+              <button type="submit" disabled={loading}
+                className="flex-1 bg-green-600 hover:bg-green-700 disabled:opacity-50 text-white font-medium py-2 rounded-lg text-sm">
+                {loading ? "Saving..." : "✓ Create Sale"}
+              </button>
+            </div>
+          </form>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ─── Shipment Detail Modal ────────────────────────────────────────────────────
 function ShipmentDetailModal({ shipment, onClose }) {
   const [details, setDetails] = useState(null);
@@ -524,6 +890,7 @@ export default function Orders() {
   const [shipmentDetail,    setShipmentDetail]    = useState(null); // { shipment, employees, items }
   const [shipmentDetailOpen, setShipmentDetailOpen] = useState(false);
   const [shipmentDetailLoading, setShipmentDetailLoading] = useState(false);
+  const [damageModalShipID, setDamageModalShipID] = useState(null); // null = closed
 
   const fetchSales = async () => {
     const res = await fetch("/api/sales");
@@ -882,107 +1249,17 @@ export default function Orders() {
       )}
 
       {/* Create Modal */}
-      {isCreateModalOpen && (
-        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-2xl w-full max-w-2xl shadow-xl p-6 max-h-[90vh] overflow-y-auto">
-            <div className="flex justify-between items-center mb-6">
-              <h2 className="text-xl font-bold text-slate-800">Create New Sales Order</h2>
-              <button onClick={() => setIsCreateModalOpen(false)} className="text-slate-400 text-2xl">&times;</button>
-            </div>
-            <div className="space-y-4">
-              <div>
-                <label className="text-[10px] font-bold uppercase text-slate-400 tracking-widest">Select Customer</label>
-                <select
-                  className="w-full mt-1 p-2 border text-black border-slate-200 rounded-lg text-sm bg-slate-50"
-                  value={formData.client_ID}
-                  onChange={(e) => setFormData({ ...formData, client_ID: e.target.value })}
-                >
-                  <option value="">-- Choose a Client --</option>
-                  {clients.map(c => (
-                    <option key={c.client_ID} value={c.client_ID}>{c.client_name}</option>
-                  ))}
-                </select>
-              </div>
-              <div className="border-t border-slate-100 pt-4">
-                <div className="flex justify-between items-center mb-2">
-                  <label className="text-[10px] font-bold uppercase text-slate-400 tracking-widest">Order Items</label>
-                  <button
-                    onClick={() => setSelectedItems([...selectedItems, { product_ID: "", qty: 1, price: 0 }])}
-                    className="text-blue-600 text-xs font-bold hover:underline"
-                  >+ Add Item</button>
-                </div>
-                {selectedItems.map((item, index) => (
-                  <div key={index} className="flex gap-2 mb-2 items-center">
-                    <select
-                      className="flex-1 p-2 border text-black border-slate-200 rounded-lg text-sm"
-                      onChange={(e) => {
-                        const p = products.find(prod => prod.product_ID == e.target.value);
-                        const newItems = [...selectedItems];
-                        newItems[index] = { ...newItems[index], product_ID: e.target.value, price: p?.product_unitPrice || 0 };
-                        setSelectedItems(newItems);
-                      }}
-                    >
-                      <option value="">Select Product</option>
-                      {products.map(p => (
-                        <option key={p.product_ID} value={p.product_ID} disabled={p.product_stockQty <= 0}>
-                          {p.product_name} (Stock: {p.product_stockQty})
-                        </option>
-                      ))}
-                    </select>
-                    <input
-                      type="number" min="1" placeholder="Qty"
-                      className="w-20 p-2 border text-black border-slate-200 rounded-lg text-sm"
-                      value={item.qty}
-                      onChange={(e) => {
-                        const newItems = [...selectedItems];
-                        newItems[index].qty = Number(e.target.value);
-                        setSelectedItems(newItems);
-                      }}
-                    />
-                    <button onClick={() => setSelectedItems(selectedItems.filter((_, i) => i !== index))} className="text-red-400 hover:text-red-600 px-2">✕</button>
-                  </div>
-                ))}
-              </div>
-              <div className="bg-blue-50 p-4 rounded-xl flex justify-between items-center">
-                <span className="text-sm font-bold text-blue-800">Total Order Amount:</span>
-                <span className="text-xl font-black text-blue-600">
-                  ₱{selectedItems.reduce((sum, i) => sum + (i.qty * i.price), 0).toLocaleString()}
-                </span>
-              </div>
-              <div className="flex gap-3 mt-8">
-                <button
-                  onClick={() => setIsCreateModalOpen(false)}
-                  className="flex-1 px-4 py-2 border border-slate-200 rounded-lg text-slate-600 font-medium hover:bg-slate-50"
-                >Cancel</button>
-                <button
-                  className="flex-1 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-bold shadow-lg shadow-blue-100 transition-all"
-                  onClick={async () => {
-                    const total = selectedItems.reduce((sum, i) => sum + (i.qty * i.price), 0);
-                    const res = await fetch("/api/sales", {
-                      method: "POST",
-                      headers: { "Content-Type": "application/json" },
-                      body: JSON.stringify({
-                        client_ID: formData.client_ID,
-                        items: selectedItems,
-                        totalAmount: total,
-                        amountPaid: 0,
-                      }),
-                    });
-                    if (res.ok) {
-                      await fetchSales();
-                      setIsCreateModalOpen(false);
-                      setSelectedItems([{ product_ID: "", qty: 1, price: 0 }]);
-                    } else {
-                      const err = await res.json();
-                      alert(err.error || "Failed to create order");
-                    }
-                  }}
-                >Create Order & Update Inventory</button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
+      <NewSaleModal
+        open={isCreateModalOpen}
+        onClose={() => setIsCreateModalOpen(false)}
+        onSuccess={(msg) => {
+          setIsCreateModalOpen(false);
+          setToast({ message: msg, type: "success" });
+          fetchSales();
+        }}
+        clients={clients}
+        products={products}
+      />
 
       {/* Ship Modal */}
       {shippingOrder && (
@@ -1160,14 +1437,37 @@ export default function Orders() {
               )}
             </div>
 
-            <div className="px-6 py-4 border-t border-slate-100 shrink-0">
+            <div className="px-6 py-4 border-t border-slate-100 shrink-0 flex gap-3">
               <button onClick={() => setShipmentDetailOpen(false)}
-                className="w-full border border-slate-200 text-slate-600 font-medium py-2.5 rounded-lg text-sm hover:bg-slate-50 transition-colors">
+                className="flex-1 border border-slate-200 text-slate-600 font-medium py-2.5 rounded-lg text-sm hover:bg-slate-50 transition-colors">
                 Close
               </button>
+              {shipmentDetail && (
+                <button
+                  onClick={() => {
+                    setDamageModalShipID(shipmentDetail.shipment.shipment_ID);
+                    setShipmentDetailOpen(false);
+                  }}
+                  className="flex-1 bg-orange-500 hover:bg-orange-600 text-white font-semibold py-2.5 rounded-lg text-sm transition-colors"
+                >
+                  ⚠️ Record Damage
+                </button>
+              )}
             </div>
           </div>
         </div>
+      )}
+
+      {/* Delivery Damage Modal (opened from shipment detail) */}
+      {damageModalShipID !== null && (
+        <DeliveryDamageModal
+          initialShipmentID={damageModalShipID}
+          onClose={() => setDamageModalShipID(null)}
+          onSuccess={msg => {
+            setDamageModalShipID(null);
+            setToast({ message: msg, type: "success" });
+          }}
+        />
       )}
 
       {/* Toast */}

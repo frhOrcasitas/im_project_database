@@ -152,44 +152,57 @@ function WarehouseDamageModal({ products, onClose, onSuccess }) {
 }
 
 // ─── Record Delivery Damage Modal ─────────────────────────────────────────────
-function DeliveryDamageModal({ onClose, onSuccess }) {
-  const [shipmentID,  setShipmentID]  = useState("");
-  const [shipItems,   setShipItems]   = useState([]);
+function DeliveryDamageModal({ onClose, onSuccess, initialShipmentID = "" }) {
+  const [shipmentID,  setShipmentID]  = useState(String(initialShipmentID));
   const [loadingShip, setLoadingShip] = useState(false);
   const [items,       setItems]       = useState([]);
   const [submitting,  setSubmitting]  = useState(false);
   const [error,       setError]       = useState("");
+  const [loaded,      setLoaded]      = useState(false);
 
-  const loadShipment = async () => {
-    if (!shipmentID) return setError("Enter a shipment ID.");
+  // Auto-load if initialShipmentID provided
+  useEffect(() => {
+    if (initialShipmentID) loadShipment(String(initialShipmentID));
+  }, []);
+
+  const loadShipment = async (idOverride) => {
+    const id = idOverride ?? shipmentID;
+    if (!id) return setError("Enter a shipment ID.");
     setLoadingShip(true);
     setError("");
+    setLoaded(false);
     try {
-      const res = await fetch(`/api/shipment/${shipmentID}`);
+      const res  = await fetch(`/api/shipment/${id}`);
       const data = await res.json();
       if (!res.ok || !data.items?.length) throw new Error("Shipment not found or has no items.");
-      setShipItems(data.items);
       setItems(data.items.map(i => ({
         productLine_ID:     i.productLine_ID,
         product_name:       i.product_name,
+        shipped_qty:        i.product_quantity,
         damage_quantity:    1,
         damage_description: "",
         include:            false,
       })));
+      setLoaded(true);
     } catch (err) {
       setError(err.message);
-      setShipItems([]);
       setItems([]);
+      setLoaded(false);
     } finally {
       setLoadingShip(false);
     }
   };
 
-  const updateItem = (idx, key, val) => setItems(i => i.map((item, j) => j === idx ? { ...item, [key]: val } : item));
+  const updateItem = (idx, key, val) =>
+    setItems(prev => prev.map((item, j) => j === idx ? { ...item, [key]: val } : item));
 
   const handleSubmit = async () => {
     const selected = items.filter(i => i.include);
-    if (!selected.length) return setError("Select at least one damaged item.");
+    if (!selected.length) return setError("Check at least one damaged item.");
+    for (const s of selected) {
+      if (Number(s.damage_quantity) < 1) return setError(`Qty must be ≥ 1 for "${s.product_name}".`);
+      if (Number(s.damage_quantity) > s.shipped_qty) return setError(`Qty for "${s.product_name}" exceeds shipped qty (${s.shipped_qty}).`);
+    }
 
     setSubmitting(true);
     setError("");
@@ -217,13 +230,17 @@ function DeliveryDamageModal({ onClose, onSuccess }) {
     }
   };
 
+  const selectedCount = items.filter(i => i.include).length;
+
   return (
     <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
       <div className="bg-white rounded-2xl w-full max-w-xl shadow-xl max-h-[90vh] flex flex-col overflow-hidden">
         <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between shrink-0">
           <div>
             <h2 className="text-lg font-bold text-slate-800">🚚 Record Delivery Damage</h2>
-            <p className="text-xs text-slate-400 mt-0.5">Link damage to a specific shipment</p>
+            <p className="text-xs text-slate-400 mt-0.5">
+              {loaded ? `SHP-${shipmentID} · ${items.length} item(s) · ${selectedCount} selected` : "Link damage to a specific shipment"}
+            </p>
           </div>
           <button onClick={onClose} className="text-slate-400 hover:text-slate-600 w-8 h-8 flex items-center justify-center rounded-lg hover:bg-slate-100">✕</button>
         </div>
@@ -231,58 +248,81 @@ function DeliveryDamageModal({ onClose, onSuccess }) {
         <div className="overflow-y-auto flex-1 px-6 py-5 flex flex-col gap-4">
           {/* Shipment lookup */}
           <div>
-            <label className="text-xs font-bold text-slate-500 uppercase tracking-wide block mb-1.5">Shipment ID <span className="text-red-400">*</span></label>
+            <label className="text-xs font-bold text-slate-500 uppercase tracking-wide block mb-1.5">
+              Shipment ID <span className="text-red-400">*</span>
+            </label>
             <div className="flex gap-2">
               <input
-                type="number" min="1" placeholder="e.g. 1"
+                type="number" min="1" placeholder="e.g. 9"
                 className="flex-1 border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-orange-400"
                 value={shipmentID}
-                onChange={e => { setShipmentID(e.target.value); setShipItems([]); setItems([]); }}
+                onChange={e => { setShipmentID(e.target.value); setItems([]); setLoaded(false); setError(""); }}
+                onKeyDown={e => e.key === "Enter" && loadShipment()}
               />
               <button
-                onClick={loadShipment}
-                disabled={loadingShip}
-                className="bg-slate-800 hover:bg-slate-900 disabled:opacity-50 text-white text-sm font-semibold px-4 py-2 rounded-lg"
+                onClick={() => loadShipment()}
+                disabled={loadingShip || !shipmentID}
+                className="bg-slate-800 hover:bg-slate-900 disabled:opacity-50 text-white text-sm font-semibold px-4 py-2 rounded-lg min-w-[72px]"
               >
-                {loadingShip ? "Loading..." : "Load"}
+                {loadingShip ? "..." : loaded ? "Reload" : "Load"}
               </button>
             </div>
           </div>
 
-          {/* Items from shipment */}
+          {/* Items */}
           {items.length > 0 && (
             <div>
-              <label className="text-xs font-bold text-slate-500 uppercase tracking-wide block mb-2">
-                Select Damaged Items <span className="text-red-400">*</span>
-              </label>
-              <div className="flex flex-col gap-3">
+              <div className="flex items-center justify-between mb-2">
+                <label className="text-xs font-bold text-slate-500 uppercase tracking-wide">
+                  Select Damaged Items <span className="text-red-400">*</span>
+                </label>
+                <span className="text-xs text-slate-400">{selectedCount} / {items.length} selected</span>
+              </div>
+              <div className="flex flex-col gap-2">
                 {items.map((item, idx) => (
-                  <div key={idx} className={`border rounded-xl p-3 flex flex-col gap-2 transition-colors ${item.include ? "border-orange-300 bg-orange-50" : "border-slate-200 bg-slate-50"}`}>
+                  <div key={idx}
+                    className={`border rounded-xl p-3 transition-colors ${item.include ? "border-orange-300 bg-orange-50" : "border-slate-200 bg-slate-50"}`}>
+                    {/* Row 1: checkbox · name · qty input */}
                     <div className="flex items-center gap-3">
                       <button
+                        type="button"
                         onClick={() => updateItem(idx, "include", !item.include)}
-                        className={`w-5 h-5 rounded border-2 flex items-center justify-center shrink-0 transition-colors ${item.include ? "bg-orange-500 border-orange-500" : "border-slate-300"}`}
+                        className={`w-5 h-5 rounded border-2 flex items-center justify-center shrink-0 transition-colors ${
+                          item.include ? "bg-orange-500 border-orange-500" : "bg-white border-slate-300 hover:border-orange-400"
+                        }`}
                       >
-                        {item.include && <span className="text-white text-xs font-bold">✓</span>}
+                        {item.include && <span className="text-white text-xs font-bold leading-none">✓</span>}
                       </button>
-                      <span className="flex-1 text-sm font-medium text-slate-700">{item.product_name}</span>
-                      <input
-                        type="number" min="1"
-                        disabled={!item.include}
-                        className="w-24 border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-800 bg-white focus:outline-none focus:ring-2 focus:ring-orange-400 disabled:opacity-40"
-                        placeholder="Qty"
-                        value={item.damage_quantity}
-                        onChange={e => updateItem(idx, "damage_quantity", e.target.value)}
-                      />
+
+                      <div className="flex-1 min-w-0">
+                        <span className="text-sm font-semibold text-slate-700 block truncate">{item.product_name}</span>
+                        <span className="text-[10px] text-slate-400">Shipped: {item.shipped_qty}</span>
+                      </div>
+
+                      <div className="flex items-center gap-1.5 shrink-0">
+                        <span className="text-xs text-slate-400">Damaged:</span>
+                        <input
+                          type="number" min="1" max={item.shipped_qty}
+                          className={`w-20 border rounded-lg px-2 py-1.5 text-sm text-center font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-orange-400 ${
+                            item.include ? "border-orange-200 bg-white" : "border-slate-200 bg-slate-100 text-slate-400"
+                          }`}
+                          value={item.damage_quantity}
+                          onChange={e => updateItem(idx, "damage_quantity", e.target.value)}
+                        />
+                      </div>
                     </div>
+
+                    {/* Row 2: description — only when checked */}
                     {item.include && (
-                      <input
-                        type="text"
-                        className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-800 bg-white focus:outline-none focus:ring-2 focus:ring-orange-400"
-                        placeholder="Description (optional)"
-                        value={item.damage_description}
-                        onChange={e => updateItem(idx, "damage_description", e.target.value)}
-                      />
+                      <div className="mt-2 pl-8">
+                        <input
+                          type="text"
+                          className="w-full border border-orange-200 rounded-lg px-3 py-1.5 text-sm text-slate-800 bg-white focus:outline-none focus:ring-2 focus:ring-orange-400 placeholder:text-slate-300"
+                          placeholder="Description of damage (optional)"
+                          value={item.damage_description}
+                          onChange={e => updateItem(idx, "damage_description", e.target.value)}
+                        />
+                      </div>
                     )}
                   </div>
                 ))}
@@ -290,17 +330,25 @@ function DeliveryDamageModal({ onClose, onSuccess }) {
             </div>
           )}
 
-          {error && <div className="bg-red-50 border border-red-200 text-red-700 rounded-lg px-4 py-3 text-sm">{error}</div>}
+          {!loaded && !loadingShip && !error && (
+            <p className="text-xs text-slate-400 italic text-center py-2">Enter a shipment ID above and click Load to see items.</p>
+          )}
+
+          {error && (
+            <div className="bg-red-50 border border-red-200 text-red-700 rounded-lg px-4 py-3 text-sm">{error}</div>
+          )}
         </div>
 
         <div className="px-6 py-4 border-t border-slate-100 flex gap-3 shrink-0">
-          <button onClick={onClose} className="flex-1 border border-slate-200 text-slate-600 font-medium py-2.5 rounded-lg text-sm hover:bg-slate-50">Cancel</button>
+          <button onClick={onClose} className="flex-1 border border-slate-200 text-slate-600 font-medium py-2.5 rounded-lg text-sm hover:bg-slate-50">
+            Cancel
+          </button>
           <button
             onClick={handleSubmit}
-            disabled={submitting || !items.length}
-            className="flex-1 bg-orange-500 hover:bg-orange-600 disabled:opacity-50 text-white font-semibold py-2.5 rounded-lg text-sm"
+            disabled={submitting || selectedCount === 0}
+            className="flex-1 bg-orange-500 hover:bg-orange-600 disabled:opacity-40 disabled:cursor-not-allowed text-white font-semibold py-2.5 rounded-lg text-sm"
           >
-            {submitting ? "Recording..." : "⚠️ Record Damage"}
+            {submitting ? "Recording..." : `⚠️ Record ${selectedCount > 0 ? `${selectedCount} Item${selectedCount > 1 ? "s" : ""}` : "Damage"}`}
           </button>
         </div>
       </div>
@@ -365,7 +413,12 @@ export default function Inventory() {
       ]);
       const [wData, dData] = await Promise.all([wRes.json(), dRes.json()]);
       setWarehouseDamages(Array.isArray(wData) ? wData : []);
-      setDeliveryDamages(Array.isArray(dData) ? dData : []);
+      // Normalize shipment_id → shipment_ID regardless of what MySQL returns
+      setDeliveryDamages(Array.isArray(dData) ? dData.map(d => ({
+        ...d,
+        shipment_ID: d.shipment_ID ?? d.shipment_id ?? null,
+        damage_ID:   d.damage_ID   ?? d.damage_id   ?? null,
+      })) : []);
     } catch {
       setWarehouseDamages([]);
       setDeliveryDamages([]);
@@ -651,10 +704,14 @@ export default function Inventory() {
               <tbody className="divide-y divide-slate-50">
                 {deliveryDamages.length === 0 ? (
                   <tr><td colSpan="8" className="py-10 text-center text-slate-400 italic text-xs">No delivery damage records.</td></tr>
-                ) : deliveryDamages.map(d => (
-                  <tr key={d.damage_ID} className="hover:bg-slate-50">
+                ) : deliveryDamages
+                    .filter((d, idx, arr) => arr.findIndex(x => x.damage_ID === d.damage_ID) === idx)
+                    .map((d, idx) => (
+                  <tr key={`${d.damage_ID}-${idx}`} className="hover:bg-slate-50">
                     <td className="px-4 py-3 font-bold text-slate-500 text-xs">DMG-{d.damage_ID}</td>
-                    <td className="px-4 py-3 font-bold text-blue-600">SHP-{d.shipment_ID}</td>
+                    <td className="px-4 py-3 font-bold text-blue-600">
+                      {(d.shipment_ID ?? d.shipment_id) ? `SHP-${d.shipment_ID ?? d.shipment_id}` : <span className="text-slate-300 italic">—</span>}
+                    </td>
                     <td className="px-4 py-3 font-medium text-slate-700">{d.product_name}</td>
                     <td className="px-4 py-3 text-slate-500 text-xs">{d.damage_date ? new Date(d.damage_date).toLocaleDateString() : "—"}</td>
                     <td className="px-4 py-3 text-red-600 font-bold">{d.damage_quantity}</td>
