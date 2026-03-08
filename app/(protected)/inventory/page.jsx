@@ -9,6 +9,12 @@ const getStatus = (stock, reorder) => {
   return { label: "In Stock", cls: "bg-green-100 text-green-700" };
 };
 
+// Formats date to YYYY-MM-DD (removes the T and timestamp)
+const formatDateOnly = (dateStr) => {
+  if (!dateStr) return "N/A";
+  return dateStr.split('T')[0];
+};
+
 // ─── Record Warehouse Damage Modal ───────────────────────────────────────────
 function WarehouseDamageModal({ products, onClose, onSuccess }) {
   const [managers,   setManagers]   = useState([]);
@@ -625,8 +631,8 @@ export default function Inventory() {
 
         <div className="overflow-auto max-h-[60vh]">
           <table className="w-full text-left border-collapse">
-            <thead className="sticky top-0 bg-white z-10 shadow-sm">
-              <tr className="text-[10px] font-bold text-slate-400 uppercase tracking-wider border-b border-slate-100">
+            <thead className="top-0 bg-white shadow-sm">
+              <tr className="text-[10px] font-bold text-slate-400 uppercase border-b border-slate-100">
                 <th className="px-6 py-4">Product</th>
                 <th className="px-4 py-4">Category</th>
                 <th className="px-4 py-4">Stock</th>
@@ -745,7 +751,7 @@ export default function Inventory() {
                 ) : warehouseDamages.map(d => (
                   <tr key={d.damage_ID} className="hover:bg-slate-50">
                     <td className="px-4 py-3 font-bold text-slate-500 text-xs">DMG-{d.damage_ID}</td>
-                    <td className="px-4 py-3 font-medium text-slate-700">{d.damage_date || "n/a"}</td>
+                    <td className="px-4 py-3 font-medium text-slate-700">{formatDateOnly(d.damage_date)}</td>
                     <td className="px-4 py-3 font-medium text-slate-700">{d.product_name}</td>
                     <td className="px-4 py-3 text-red-600 font-bold">{d.damage_quantity}</td>
                     <td className="px-4 py-3 text-slate-500">₱{Number(d.damage_amount || 0).toLocaleString()}</td>

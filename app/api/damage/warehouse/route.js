@@ -1,4 +1,5 @@
 import pool from "../../../lib/db";
+import { NextResponse } from "next/server";
 
 export async function POST(req) {
   const connection = await pool.getConnection();
@@ -25,7 +26,7 @@ export async function POST(req) {
     }
 
     for (const item of items) {
-      const { product_ID, damage_quantity } = item;
+      const { product_ID, damage_quantity, damage_description } = item;
 
       const [product] = await connection.query(
         `SELECT product_stockQty, product_unitPrice 
@@ -51,15 +52,16 @@ export async function POST(req) {
 
       await connection.query(
         `INSERT INTO tbl_damage_withinwarehouse
-        (product_ID, manager_ID, employee_ID, damage_quantity, damage_date, damage_subtotal)
-        VALUES (?, ?, ?, ?, ?, ?)`,
+        (product_ID, manager_ID, employee_ID, damage_quantity, damage_date, damage_subtotal, damage_description)
+        VALUES (?, ?, ?, ?, ?, ?, ?)`,
         [
           product_ID,
           manager_ID,
           employee_ID,
           damage_quantity,
           damage_date,
-          subtotal
+          subtotal,
+          damage_description
         ]
       );
 
@@ -99,6 +101,7 @@ export async function GET() {
                 d.damage_quantity,
                 d.damage_subtotal,
                 d.damage_description,
+                d.damage_date,
                 d.employee_id,
                 d.manager_id
              FROM tbl_damage_withinwarehouse d
