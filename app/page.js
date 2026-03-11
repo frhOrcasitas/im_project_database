@@ -5,33 +5,32 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 
 export default function Login() {
-  const [username, setUsername] = useState("");
-  const [password, setPassword] = useState("");
-  const [remember, setRemember] = useState(false);
+  const [username, setUsername]       = useState("");
+  const [password, setPassword]       = useState("");
+  const [remember, setRemember]       = useState(false);
   const [showPassword, setShowPassword] = useState(false);
+  const [loading, setLoading]         = useState(false);
   const router = useRouter();
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-
+    setLoading(true);
     try {
-      const response = await fetch('api/auth/login', {
+      const response = await fetch('/api/auth/login', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json'},
-        body: JSON.stringify({username, password}),
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username, password }),
       });
-
       const data = await response.json();
-
-      if (data.success) {
-        router.push("/dashboard");
-      } else {
-        alert("Login failed!");
-      }
+      if (!response.ok) throw new Error(data.error || "Login failed.");
+      router.push("/dashboard");
+      router.refresh();
     } catch (err) {
-      console.error("Login Error: ", err);
+      alert(err.message);
+    } finally {
+      setLoading(false);
     }
-  }
+  };
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-800 via-slate-700 to-blue-900 flex items-center justify-center p-4">
@@ -49,7 +48,7 @@ export default function Login() {
           <form onSubmit={handleSubmit} className="px-8 py-8">
             <div className="mb-4">
               <label className="block text-xs font-semibold text-slate-600 mb-1.5 uppercase tracking-wide">
-                Username or Email
+                Username
               </label>
               <input
                 type="text"
@@ -57,6 +56,7 @@ export default function Login() {
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
                 required
+                autoFocus
                 className="w-full border border-slate-300 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all text-black"
               />
             </div>
@@ -94,16 +94,14 @@ export default function Login() {
                 />
                 Remember me
               </label>
-              <Link href="/forgot-password" className="text-blue-600 hover:text-blue-800 font-medium transition-colors">
-                Forgot password?
-              </Link>
             </div>
 
             <button
               type="submit"
-              className="w-full bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white font-semibold py-3 rounded-xl text-sm transition-colors shadow-md"
+              disabled={loading}
+              className="w-full bg-blue-600 hover:bg-blue-700 disabled:opacity-50 active:bg-blue-800 text-white font-semibold py-3 rounded-xl text-sm transition-colors shadow-md"
             >
-              🔐 Login
+              {loading ? "Signing in..." : "🔐 Login"}
             </button>
           </form>
 
@@ -114,8 +112,8 @@ export default function Login() {
             </div>
             <ul className="space-y-1.5">
               {[
-                { role: "Owner", desc: "Full system access" },
-                { role: "Manager", desc: "Sales, inventory, reports" },
+                { role: "Owner",    desc: "Full system access" },
+                { role: "Manager",  desc: "Sales, inventory, reports" },
                 { role: "Employee", desc: "Limited — sales entry only" },
               ].map((r) => (
                 <li key={r.role} className="text-xs text-amber-800 flex items-center gap-1.5">

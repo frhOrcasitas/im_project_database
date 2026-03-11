@@ -1347,7 +1347,7 @@ export default function Orders() {
           <div className="overflow-x-auto">
             <div className="max-h-[420px] overflow-y-auto">
             <table className="w-full text-sm">
-              <thead className="sticky top-0 bg-white z-10">
+              <thead className="top-0 bg-white z-10">
                 <tr className="border-b border-slate-200">
                   {["Shipment #", "Order #", "Customer", "Date", "Vehicle", "Manager", "Payment", "Sale Status", "Actions"].map(h => (
                     <th key={h} className="text-left py-3 px-3 text-[10px] font-bold text-slate-400 uppercase tracking-widest">{h}</th>
