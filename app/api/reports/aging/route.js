@@ -15,6 +15,7 @@ export async function GET() {
       JOIN tbl_client c ON s.client_ID = c.client_ID
       WHERE s.sales_Balance > 0
         AND s.sales_paymentStatus != 'Paid'
+        AND s.sales_status != 'Cancelled'
       ORDER BY days_overdue DESC
     `);
     return Response.json(rows);

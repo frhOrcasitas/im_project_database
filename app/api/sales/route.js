@@ -139,15 +139,17 @@ export async function POST(request) {
 // ==========================
 export async function GET() {
   try {
-    // Sorted by sales_ID DESC to ensure UI consistency with "Recent Sales" widgets
+    
     const [rows] = await pool.query(
       `SELECT 
           s.sales_ID, 
+          s.client_ID,
           c.client_name, 
           s.sales_createdAt, 
           s.sales_totalAmount, 
           s.sales_Balance, 
           s.sales_status,
+          s.sales_paymentStatus,
           s.sales_SINumber,
           s.sales_DRNumber
        FROM tbl_sales s

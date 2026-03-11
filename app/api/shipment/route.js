@@ -1,12 +1,12 @@
 import pool from "../../lib/db";
 
 // POST - CREATE SHIPMENTS
-
 export async function POST(request) {
     const connection = await pool.getConnection();
     try {
         await connection.beginTransaction();
         const { sales_ID, manager_id, vehicle_id, items, employees } = await request.json();
+        console.log("SHIPMENT PAYLOAD:", JSON.stringify({ sales_ID, items }));
 
         // 1. Validation: Check Sale status
         const [sale] = await connection.query(
@@ -26,43 +26,42 @@ export async function POST(request) {
 
         // 3. Process Items & Deduct Stock
         for (const item of items) {
-            // Check remaining quantity for this specific productLine
+            const productID = item.productLine_ID; // productLine_ID === product_ID in this schema
+
+            // Check item exists in sale
             const [sold] = await connection.query(
                 `SELECT salesDetail_qty FROM tbl_sales_details 
-                WHERE sales_ID = ? AND productLine_ID = ?`,
-                [sales_ID, item.product_ID]  // same value as productLine_ID
+                 WHERE sales_ID = ? AND productLine_ID = ?`,
+                [sales_ID, productID]
             );
+            console.log("SOLD QUERY:", sales_ID, productID, sold);
+            if (!sold.length) throw new Error(`Item not found in sale: product ${productID}`);
 
-            if (!sold.length) throw new Error(`Item not found in sale: product ${item.product_ID}`);
-
+            // Check how much has already been shipped
             const [shipped] = await connection.query(
-                `SELECT IFNULL(SUM(sp.product_quantity), 0) as shipped_qty
+                `SELECT IFNULL(SUM(sp.product_quantity), 0) AS shipped_qty
                  FROM tbl_shipment_productdetails sp
                  JOIN tbl_shipment s ON sp.shipment_ID = s.shipment_ID
                  WHERE s.sales_ID = ? AND sp.productLine_ID = ?`,
-                [sales_ID, item.productLine_ID]
+                [sales_ID, productID]
             );
 
             const remaining = sold[0].salesDetail_qty - shipped[0].shipped_qty;
-            if (item.quantity > remaining) throw new Error(`Over-shipping item ${item.productLine_ID}. Max: ${remaining}`);
+            if (item.quantity > remaining) {
+                throw new Error(`Over-shipping item ${productID}. Max remaining: ${remaining}`);
+            }
 
-            console.log("Inserting shipment product detail:", {
-                shipment_ID,
-                productLine_ID: item.productLine_ID,
-                product_ID: item.product_ID,
-                quantity: item.quantity
-            });
-
-            // Insert details
+            // Insert shipment product detail
             await connection.query(
-                `INSERT INTO tbl_shipment_productdetails (shipment_ID, productLine_ID, product_ID, product_quantity) VALUES (?, ?, ?, ?)`,
-                [shipment_ID, item.productLine_ID, item.product_ID, item.quantity]
+                `INSERT INTO tbl_shipment_productdetails (shipment_ID, productLine_ID, product_ID, product_quantity)
+                 VALUES (?, ?, ?, ?)`,
+                [shipment_ID, productID, productID, item.quantity]
             );
 
-            // ACTUAL INVENTORY DEDUCTION (Rule: "Recorded and deducted")
+            // Deduct from inventory
             await connection.query(
                 `UPDATE tbl_product SET product_stockQty = product_stockQty - ? WHERE product_ID = ?`,
-                [item.quantity, item.product_ID]  // ← item.product_ID, not sold[0].product_ID
+                [item.quantity, productID]
             );
         }
 
@@ -76,23 +75,11 @@ export async function POST(request) {
             }
         }
 
-        // 5. Final Check: Is the whole Sale now shipped?
-        const [allRemaining] = await connection.query(
-            `SELECT (sd.salesDetail_qty - IFNULL(SUM(sp.product_quantity), 0)) as diff
-             FROM tbl_sales_details sd
-             LEFT JOIN tbl_shipment sh ON sd.sales_ID = sh.sales_ID
-             LEFT JOIN tbl_shipment_productdetails sp ON sh.shipment_ID = sp.shipment_ID AND sd.productLine_ID = sp.productLine_ID
-             WHERE sd.sales_ID = ?
-             GROUP BY sd.productLine_ID`, [sales_ID]
+        // 5. Update sale status to In Transit
+        await connection.query(
+            `UPDATE tbl_sales SET sales_status = 'In Transit' WHERE sales_ID = ?`,
+            [sales_ID]
         );
-
-        const isFullyShipped = allRemaining.every(row => row.diff <= 0);
-        if (isFullyShipped) {
-            await connection.query(
-                `UPDATE tbl_sales SET sales_status = 'Completed', sales_dateCompleted = CURDATE() WHERE sales_ID = ?`,
-                [sales_ID]
-            );
-        }
 
         await connection.commit();
         return Response.json({ message: "Shipment processed and stock deducted.", shipment_ID });
@@ -105,7 +92,6 @@ export async function POST(request) {
 }
 
 // GET - LIST SHIPMENTS
-
 export async function GET() {
   try {
     const [rows] = await pool.query(`

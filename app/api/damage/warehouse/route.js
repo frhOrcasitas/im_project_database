@@ -6,6 +6,7 @@ export async function POST(req) {
 
   try {
     const { manager_ID, employee_ID, damage_date, items } = await req.json();
+    console.log("DAMAGE PAYLOAD:", { manager_ID, employee_ID, damage_date, items });
 
     if (!manager_ID || !employee_ID || !damage_date || !items?.length) {
       return NextResponse.json(
@@ -52,15 +53,16 @@ export async function POST(req) {
 
       await connection.query(
         `INSERT INTO tbl_damage_withinwarehouse
-        (product_ID, manager_ID, employee_ID, damage_quantity, damage_date, damage_subtotal, damage_description)
-        VALUES (?, ?, ?, ?, ?, ?, ?)`,
+        (product_id, manager_id, employee_id, damage_quantity, damage_amount, damage_date, damage_subtotal, damage_description)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
         [
           product_ID,
           manager_ID,
           employee_ID,
           damage_quantity,
+          subtotal,   // damage_amount
           damage_date,
-          subtotal,
+          subtotal,   // damage_subtotal
           damage_description
         ]
       );
@@ -99,23 +101,21 @@ export async function GET() {
                 d.product_id,
                 p.product_name,
                 d.damage_quantity,
+                d.damage_amount,
                 d.damage_subtotal,
                 d.damage_description,
                 d.damage_date,
-                d.employee_id,
-                d.manager_id
+                e.employee_name,
+                me.employee_name AS manager_name
              FROM tbl_damage_withinwarehouse d
-             JOIN tbl_product p
-                ON d.product_id = p.product_ID
+             JOIN tbl_product p ON d.product_id = p.product_ID
+             LEFT JOIN tbl_employee e ON d.employee_id = e.employee_ID
+             LEFT JOIN tbl_manager m ON d.manager_id = m.manager_ID
+             LEFT JOIN tbl_employee me ON m.employee_ID = me.employee_ID
              ORDER BY d.damage_ID DESC`
         );
-
         return Response.json(rows);
-
     } catch (error) {
-        return Response.json(
-            { error: error.message },
-            { status: 500 }
-        );
+        return Response.json({ error: error.message }, { status: 500 });
     }
 }

@@ -5,6 +5,7 @@ export async function GET(req, { params }) {
     try {
         const [rows] = await pool.query(`
             SELECT 
+                sd.productLine_ID,
                 sd.salesDetail_qty, 
                 sd.salesDetail_unitPriceSold, 
                 sd.salesDetail_subtotal,

@@ -50,7 +50,7 @@ export async function PATCH(request, { params }) {
         const { id } = await params;
         const { status } = await request.json();
 
-        const allowedStatuses = ["Completed", "Cancelled", "Pending"];
+        const allowedStatuses = ["Completed", "Cancelled", "Pending", "In Transit"];
 
         if (!allowedStatuses.includes(status)) {
             return Response.json(

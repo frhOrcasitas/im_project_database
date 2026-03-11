@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 
+// ── Inline Delivery Damage Modal (also used from Shipment Detail) ─────────────
 function DeliveryDamageModal({ onClose, onSuccess, initialShipmentID = "" }) {
   const [shipmentID,  setShipmentID]  = useState(String(initialShipmentID));
   const [loadingShip, setLoadingShip] = useState(false);
@@ -22,23 +23,12 @@ function DeliveryDamageModal({ onClose, onSuccess, initialShipmentID = "" }) {
       const data = await res.json();
       if (!res.ok || !data.items?.length) throw new Error("Shipment not found or has no items.");
       setItems(data.items.map(i => ({
-        productLine_ID: i.productLine_ID, 
-        product_name: i.product_name, 
-        product_ID: i.product_ID,
-        shipped_qty: i.product_quantity, 
-        damage_quantity: 1, 
-        damage_description: "", 
-        include: false,
+        productLine_ID: i.productLine_ID, product_name: i.product_name,
+        shipped_qty: i.product_quantity, damage_quantity: 1, damage_description: "", include: false,
       })));
       setLoaded(true);
-    } catch (err) { 
-      setError(err.message); 
-      setItems([]); 
-      setLoaded(false); 
-    }
-    finally { 
-      setLoadingShip(false); 
-    }
+    } catch (err) { setError(err.message); setItems([]); }
+    finally { setLoadingShip(false); }
   };
 
   const updateItem = (idx, key, val) =>
@@ -47,172 +37,87 @@ function DeliveryDamageModal({ onClose, onSuccess, initialShipmentID = "" }) {
   const handleSubmit = async () => {
     const selected = items.filter(i => i.include);
     if (!selected.length) return setError("Check at least one damaged item.");
-    
-    for (const s of selected) {
-      if (Number(s.damage_quantity) < 1) return setError(`Qty must be ≥ 1 for "${s.product_name}".`);
-      if (Number(s.damage_quantity) > s.shipped_qty) return setError(`Qty for "${s.product_name}" exceeds shipped qty (${s.shipped_qty}).`);
-    }
-
-    setSubmitting(true); 
-    setError("");
+    setSubmitting(true); setError("");
     try {
       const res = await fetch("/api/damage/during", {
-        method: "POST", 
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ 
-          shipment_ID: Number(shipmentID), 
-          items: selected.map(i => ({
-            productLine_ID: i.productLine_ID, 
-            product_ID: i.product_ID,
-            damage_quantity: Number(i.damage_quantity),
-            damage_description: i.damage_description || null,
-          })) 
-        }),
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ shipment_ID: Number(shipmentID), items: selected.map(i => ({
+          productLine_ID: i.productLine_ID, damage_quantity: Number(i.damage_quantity),
+          damage_description: i.damage_description || null,
+        })) }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error);
       onSuccess("Delivery damage recorded.");
       onClose();
-    } catch (err) { 
-      setError(err.message); 
-    }
-    finally { 
-      setSubmitting(false); 
-    }
+    } catch (err) { setError(err.message); }
+    finally { setSubmitting(false); }
   };
 
   const selectedCount = items.filter(i => i.include).length;
 
   return (
-    <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-[9999] p-4" style={{ pointerEvents: 'auto' }}>
-      <div className="bg-white rounded-2xl w-full max-w-xl shadow-xl max-h-[90vh] flex flex-col overflow-hidden" style={{ pointerEvents: 'auto' }}>
-        {/* HEADER */}
-        <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between shrink-0" style={{ pointerEvents: 'auto' }}>
+    <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-[60] p-4">
+      <div className="bg-white rounded-2xl w-full max-w-xl shadow-xl max-h-[90vh] flex flex-col overflow-hidden">
+        <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between shrink-0">
           <div>
             <h2 className="text-lg font-bold text-slate-800">🚚 Record Delivery Damage</h2>
             <p className="text-xs text-slate-400 mt-0.5">
               {loaded ? `SHP-${shipmentID} · ${items.length} item(s) · ${selectedCount} selected` : "Link damage to a specific shipment"}
             </p>
           </div>
-          <button 
-            onClick={onClose} 
-            className="text-slate-400 hover:text-slate-600 w-8 h-8 flex items-center justify-center rounded-lg hover:bg-slate-100 flex-shrink-0"
-            style={{ pointerEvents: 'auto' }}
-          >
-            ✕
-          </button>
+          <button onClick={onClose} className="text-slate-400 hover:text-slate-600 w-8 h-8 flex items-center justify-center rounded-lg hover:bg-slate-100">✕</button>
         </div>
-
-        {/* BODY - SCROLLABLE */}
-        <div className="overflow-y-auto flex-1 px-6 py-5 flex flex-col gap-4" style={{ pointerEvents: 'auto' }}>
-          
-          {/* SHIPMENT ID INPUT */}
-          <div style={{ pointerEvents: 'auto' }}>
-            <label className="text-xs font-bold text-slate-500 uppercase tracking-wide block mb-1.5">
-              Shipment ID <span className="text-red-400">*</span>
-            </label>
-            <div className="flex gap-2" style={{ pointerEvents: 'auto' }}>
-              <input 
-                type="number" 
-                min="1" 
-                placeholder="e.g. 9"
-                className="flex-1 border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-800 bg-white focus:outline-none focus:ring-2 focus:ring-orange-400"
+        <div className="overflow-y-auto flex-1 px-6 py-5 flex flex-col gap-4">
+          <div>
+            <label className="text-xs font-bold text-slate-500 uppercase tracking-wide block mb-1.5">Shipment ID <span className="text-red-400">*</span></label>
+            <div className="flex gap-2">
+              <input type="number" min="1" placeholder="e.g. 9"
+                className="flex-1 border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-orange-400"
                 value={shipmentID}
                 onChange={e => { setShipmentID(e.target.value); setItems([]); setLoaded(false); setError(""); }}
                 onKeyDown={e => e.key === "Enter" && doLoad(shipmentID)}
-                style={{ pointerEvents: 'auto' }}
               />
-              <button 
-                onClick={() => doLoad(shipmentID)} 
-                disabled={loadingShip || !shipmentID}
-                className="bg-slate-800 hover:bg-slate-900 disabled:opacity-50 text-white text-sm font-semibold px-4 py-2 rounded-lg min-w-[72px]"
-                style={{ pointerEvents: 'auto' }}
-              >
+              <button onClick={() => doLoad(shipmentID)} disabled={loadingShip || !shipmentID}
+                className="bg-slate-800 hover:bg-slate-900 disabled:opacity-50 text-white text-sm font-semibold px-4 py-2 rounded-lg min-w-[72px]">
                 {loadingShip ? "..." : loaded ? "Reload" : "Load"}
               </button>
             </div>
           </div>
-
-          {/* ITEMS LIST */}
           {items.length > 0 && (
-            <div style={{ pointerEvents: 'auto' }}>
+            <div>
               <div className="flex items-center justify-between mb-2">
-                <label className="text-xs font-bold text-slate-500 uppercase tracking-wide">
-                  Select Damaged Items <span className="text-red-400">*</span>
-                </label>
+                <label className="text-xs font-bold text-slate-500 uppercase tracking-wide">Select Damaged Items <span className="text-red-400">*</span></label>
                 <span className="text-xs text-slate-400">{selectedCount} / {items.length} selected</span>
               </div>
-
-              <div className="flex flex-col gap-2" style={{ pointerEvents: 'auto' }}>
+              <div className="flex flex-col gap-2">
                 {items.map((item, idx) => (
-                  <div
-                    key={idx}
-                    onClick={() => updateItem(idx, "include", !item.include)}
-                    className={`border rounded-xl p-3 transition-all cursor-pointer hover:shadow-sm ${
-                      item.include
-                        ? "border-orange-300 bg-orange-50"
-                        : "border-slate-200 bg-slate-50 hover:bg-orange-50"
-                    }`}
-                  >
-                    
-                    {/* Product Header */}
-                    <div className="flex justify-between items-center">
-                      <div className="flex items-center gap-3">
-                        
-                        {/* Checkbox */}
-                        <div
-                          className={`w-5 h-5 flex items-center justify-center rounded border ${
-                            item.include
-                              ? "bg-orange-500 border-orange-500 text-white"
-                              : "border-slate-300 bg-white"
-                          }`}
-                        >
-                          {item.include && "✓"}
-                        </div>
-
-                        {/* Product Name */}
-                        <div>
-                          <p className="font-semibold text-slate-800">
-                            {item.product_name}
-                          </p>
-                          <p className="text-xs text-slate-500">
-                            Shipped: {item.shipped_qty}
-                          </p>
-                        </div>
+                  <div key={idx} className={`border rounded-xl p-3 transition-colors ${item.include ? "border-orange-300 bg-orange-50" : "border-slate-200 bg-slate-50"}`}>
+                    <div className="flex items-center gap-3">
+                      <button type="button" onClick={() => updateItem(idx, "include", !item.include)}
+                        className={`w-5 h-5 rounded border-2 flex items-center justify-center shrink-0 transition-colors ${item.include ? "bg-orange-500 border-orange-500" : "bg-white border-slate-300 hover:border-orange-400"}`}>
+                        {item.include && <span className="text-white text-xs font-bold leading-none">✓</span>}
+                      </button>
+                      <div className="flex-1 min-w-0">
+                        <span className="text-sm font-semibold text-slate-700 block truncate">{item.product_name}</span>
+                        <span className="text-[10px] text-slate-400">Shipped: {item.shipped_qty}</span>
                       </div>
-
-                      {/* Damage Quantity */}
-                      {item.include && (
-                        <input
-                          type="number"
-                          min="1"
-                          max={item.shipped_qty}
+                      <div className="flex items-center gap-1.5 shrink-0">
+                        <span className="text-xs text-slate-400">Damaged:</span>
+                        <input type="number" min="1" max={item.shipped_qty}
+                          className={`w-20 border rounded-lg px-2 py-1.5 text-sm text-center font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-orange-400 ${item.include ? "border-orange-200 bg-white" : "border-slate-200 bg-slate-100 text-slate-400"}`}
                           value={item.damage_quantity}
-                          onClick={(e) => e.stopPropagation()}
-                          onChange={(e) =>
-                            updateItem(
-                              idx,
-                              "damage_quantity",
-                              parseInt(e.target.value) || 1
-                            )
-                          }
-                          className="w-20 border border-orange-200 rounded-lg px-2 py-1.5 text-sm text-center font-bold text-slate-800 bg-white focus:outline-none focus:ring-2 focus:ring-orange-400"
+                          onChange={e => updateItem(idx, "damage_quantity", e.target.value)}
                         />
-                      )}
+                      </div>
                     </div>
-
-                    {/* Description */}
                     {item.include && (
-                      <div className="mt-3">
-                        <input
-                          type="text"
-                          placeholder="Optional damage description"
-                          value={item.damage_description || ""}
-                          onClick={(e) => e.stopPropagation()}
-                          onChange={(e) =>
-                            updateItem(idx, "damage_description", e.target.value)
-                          }
-                          className="w-full border border-orange-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400"
+                      <div className="mt-2 pl-8">
+                        <input type="text"
+                          className="w-full border border-orange-200 rounded-lg px-3 py-1.5 text-sm text-slate-800 bg-white focus:outline-none focus:ring-2 focus:ring-orange-400 placeholder:text-slate-300"
+                          placeholder="Description of damage (optional)"
+                          value={item.damage_description}
+                          onChange={e => updateItem(idx, "damage_description", e.target.value)}
                         />
                       </div>
                     )}
@@ -221,31 +126,15 @@ function DeliveryDamageModal({ onClose, onSuccess, initialShipmentID = "" }) {
               </div>
             </div>
           )}
-
           {!loaded && !loadingShip && !error && (
             <p className="text-xs text-slate-400 italic text-center py-2">Enter a shipment ID above and click Load to see items.</p>
           )}
-
-          {error && (
-            <div className="bg-red-50 border border-red-200 text-red-700 rounded-lg px-4 py-3 text-sm">{error}</div>
-          )}
+          {error && <div className="bg-red-50 border border-red-200 text-red-700 rounded-lg px-4 py-3 text-sm">{error}</div>}
         </div>
-
-        {/* FOOTER */}
-        <div className="px-6 py-4 border-t border-slate-100 flex gap-3 shrink-0" style={{ pointerEvents: 'auto' }}>
-          <button 
-            onClick={onClose} 
-            className="flex-1 border border-slate-200 text-slate-600 font-medium py-2.5 rounded-lg text-sm hover:bg-slate-50"
-            style={{ pointerEvents: 'auto' }}
-          >
-            Cancel
-          </button>
-          <button 
-            onClick={handleSubmit} 
-            disabled={submitting || selectedCount === 0}
-            className="flex-1 bg-orange-500 hover:bg-orange-600 disabled:opacity-40 disabled:cursor-not-allowed text-white font-semibold py-2.5 rounded-lg text-sm"
-            style={{ pointerEvents: 'auto' }}
-          >
+        <div className="px-6 py-4 border-t border-slate-100 flex gap-3 shrink-0">
+          <button onClick={onClose} className="flex-1 border border-slate-200 text-slate-600 font-medium py-2.5 rounded-lg text-sm hover:bg-slate-50">Cancel</button>
+          <button onClick={handleSubmit} disabled={submitting || selectedCount === 0}
+            className="flex-1 bg-orange-500 hover:bg-orange-600 disabled:opacity-40 disabled:cursor-not-allowed text-white font-semibold py-2.5 rounded-lg text-sm">
             {submitting ? "Recording..." : `⚠️ Record ${selectedCount > 0 ? `${selectedCount} Item${selectedCount > 1 ? "s" : ""}` : "Damage"}`}
           </button>
         </div>
@@ -315,7 +204,10 @@ function ShipModal({ order, onClose, onSuccess }) {
         const allEmps = Array.isArray(mData) ? mData : [];
         setManagers(allEmps.filter(e => Number(e.isManager) === 1));
         setEmployees(allEmps);
-        setItems(Array.isArray(dData) ? dData.map(i => ({ ...i, ship_qty: i.salesDetail_qty })) : []);
+        setItems(Array.isArray(dData) ? dData.map(i => {
+          console.log("item keys:", Object.keys(i), i); // ← add this
+          return { ...i, ship_qty: i.salesDetail_qty };
+        }) : []);
       } catch (err) {
         setError("Failed to load shipment data.");
       } finally {
@@ -358,6 +250,14 @@ function ShipModal({ order, onClose, onSuccess }) {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error);
+
+      // Move order to In Transit
+      await fetch(`/api/sales/${order.sales_ID}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status: "In Transit" }),
+      });
+
       onSuccess(`Shipment created for Order #ORD-${order.sales_ID}`);
       onClose();
     } catch (err) {
@@ -980,6 +880,8 @@ export default function Orders() {
   const [sales,         setSales]         = useState([]);
   const [loading,       setLoading]       = useState(true);
   const [statusFilter,  setStatusFilter]  = useState("all");
+  const [orderSearch,   setOrderSearch]   = useState("");
+  const [shipmentSearch, setShipmentSearch] = useState("");
   const [viewingOrder,  setViewingOrder]  = useState(null);
   const [orderDetails,  setOrderDetails]  = useState([]);
   const [isViewModalOpen,   setIsViewModalOpen]   = useState(false);
@@ -1084,10 +986,21 @@ export default function Orders() {
     initData();
   }, []);
 
-  const filtered = sales.filter(s => statusFilter === "all" || s.sales_status === statusFilter);
+  const filtered = sales.filter(s => {
+    const matchStatus = statusFilter === "all" || s.sales_status === statusFilter;
+    const q = orderSearch.toLowerCase();
+    const matchSearch = !q || s.client_name?.toLowerCase().includes(q) || String(s.sales_ID).includes(q);
+    return matchStatus && matchSearch;
+  });
+
+  const filteredShipments = shipments.filter(sh => {
+    const q = shipmentSearch.toLowerCase();
+    return !q || sh.client_name?.toLowerCase().includes(q) || String(sh.shipment_ID).includes(q) || String(sh.sales_ID).includes(q);
+  });
 
   const stats = {
     pending:   sales.filter(s => s.sales_status === "Pending").length,
+    inTransit: sales.filter(s => s.sales_status === "In Transit").length,
     completed: sales.filter(s => s.sales_status === "Completed").length,
     revenue:   sales.reduce((acc, curr) => acc + Number(curr.sales_totalAmount), 0),
   };
@@ -1157,9 +1070,10 @@ export default function Orders() {
       </div>
 
       {/* Stats */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+      <div className="grid grid-cols-2 lg:grid-cols-5 gap-4 mb-6">
         {[
           { label: "Pending Orders", value: stats.pending,  color: "text-red-500" },
+          { label: "In Transit",     value: stats.inTransit, color: "text-blue-500" },
           { label: "Completed",      value: stats.completed, color: "text-green-600" },
           { label: "Total Sales",    value: sales.length,   color: "text-blue-600" },
           { label: "Total Revenue",  value: `₱${stats.revenue.toLocaleString()}`, color: "text-slate-800" },
@@ -1173,10 +1087,10 @@ export default function Orders() {
 
       {/* Orders Table */}
       <div className="bg-white rounded-xl shadow-sm p-5 border border-slate-100">
-        <div className="flex flex-wrap items-center justify-between gap-3 mb-6">
+        <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
           <h2 className="text-base font-bold text-slate-700">Recent Sales Orders</h2>
           <div className="flex gap-2 flex-wrap">
-            {["all", "Pending", "Completed", "Cancelled"].map((status) => (
+            {["all", "Pending", "In Transit", "Completed", "Cancelled"].map((status) => (
               <button
                 key={status}
                 onClick={() => setStatusFilter(status)}
@@ -1192,9 +1106,21 @@ export default function Orders() {
           </div>
         </div>
 
+        {/* Search */}
+        <div className="mb-4">
+          <input
+            type="text"
+            placeholder="Search by customer name or order #..."
+            value={orderSearch}
+            onChange={e => setOrderSearch(e.target.value)}
+            className="w-full max-w-xs border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-400 bg-white"
+          />
+        </div>
+
         <div className="overflow-x-auto">
+          <div className="max-h-[420px] overflow-y-auto">
           <table className="w-full text-sm">
-            <thead>
+            <thead className="stop-0 bg-white z-10">
               <tr className="border-b border-slate-200">
                 {["Order #", "Customer", "Date", "Amount", "Balance", "Status", "Actions"].map((h) => (
                   <th key={h} className="text-left py-3 px-3 text-[10px] font-bold text-slate-400 uppercase tracking-widest">{h}</th>
@@ -1230,7 +1156,15 @@ export default function Orders() {
                           Ship
                         </button>
                       )}
-                      {s.sales_status !== "Cancelled" && (
+                      {s.sales_status === "In Transit" && (
+                        <button
+                          className="text-[10px] font-bold uppercase tracking-wider bg-green-50 text-green-600 hover:bg-green-600 hover:text-white px-3 py-1.5 rounded-md transition-all"
+                          onClick={() => updateOrderStatus(s.sales_ID, "Completed")}
+                        >
+                          Delivered
+                        </button>
+                      )}
+                      {s.sales_status !== "Cancelled" && s.sales_status !== "Completed" && (
                         <button
                           className="text-[10px] font-bold uppercase tracking-wider bg-red-50 text-red-600 hover:bg-red-600 hover:text-white px-3 py-1.5 rounded-md transition-all"
                           onClick={() => updateOrderStatus(s.sales_ID, "Cancelled")}
@@ -1247,6 +1181,7 @@ export default function Orders() {
           {filtered.length === 0 && (
             <div className="py-12 text-center text-slate-400 italic">No orders found for this category.</div>
           )}
+          </div>
         </div>
       </div>
 
@@ -1388,19 +1323,31 @@ export default function Orders() {
 
       {/* ── Shipment History Section ─────────────────────────────────── */}
       <div className="bg-white rounded-xl shadow-sm p-5 border border-slate-100 mt-6">
-        <div className="flex items-center justify-between mb-5">
+        <div className="flex items-center justify-between mb-4">
           <div>
             <h2 className="text-base font-bold text-slate-700">📦 Shipment History</h2>
             <p className="text-xs text-slate-400 mt-0.5">{shipments.length} shipment{shipments.length !== 1 ? "s" : ""} recorded</p>
           </div>
         </div>
 
+        {/* Search */}
+        <div className="mb-4">
+          <input
+            type="text"
+            placeholder="Search by customer, shipment # or order #..."
+            value={shipmentSearch}
+            onChange={e => setShipmentSearch(e.target.value)}
+            className="w-full max-w-xs border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-400 bg-white"
+          />
+        </div>
+
         {shipments.length === 0 ? (
           <div className="py-10 text-center text-slate-400 text-sm italic">No shipments recorded yet.</div>
         ) : (
           <div className="overflow-x-auto">
+            <div className="max-h-[420px] overflow-y-auto">
             <table className="w-full text-sm">
-              <thead>
+              <thead className="sticky top-0 bg-white z-10">
                 <tr className="border-b border-slate-200">
                   {["Shipment #", "Order #", "Customer", "Date", "Vehicle", "Manager", "Payment", "Sale Status", "Actions"].map(h => (
                     <th key={h} className="text-left py-3 px-3 text-[10px] font-bold text-slate-400 uppercase tracking-widest">{h}</th>
@@ -1408,7 +1355,7 @@ export default function Orders() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-50">
-                {shipments.map(sh => (
+                {filteredShipments.map(sh => (
                   <tr key={sh.shipment_ID} className="hover:bg-slate-50 transition-colors group">
                     <td className="py-3 px-3 font-bold text-slate-600">SHP-{sh.shipment_ID}</td>
                     <td className="py-3 px-3 font-bold text-blue-600">#ORD-{sh.sales_ID}</td>
@@ -1435,8 +1382,12 @@ export default function Orders() {
                     </td>
                   </tr>
                 ))}
+                {filteredShipments.length === 0 && (
+                  <tr><td colSpan="9" className="py-10 text-center text-slate-400 italic text-sm">No shipments found.</td></tr>
+                )}
               </tbody>
             </table>
+            </div>
           </div>
         )}
       </div>

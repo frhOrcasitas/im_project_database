@@ -1,5 +1,5 @@
 "use client";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 
 const today = new Date().toISOString().split("T")[0];
 const thisMonth = today.slice(0, 7);
@@ -83,12 +83,86 @@ function TableWrapper({ headers, children, footer }) {
   );
 }
 
-function DailyResult({ data }) {
-  const rows = Array.isArray(data) ? data : [data];
-  if (!rows.length) return <EmptyState message="No sales found for this date range." />;
+function paymentBadge(status) {
+  if (status === "Paid")    return "bg-green-100 text-green-700";
+  if (status === "Partial") return "bg-amber-100 text-amber-700";
+  return "bg-red-100 text-red-700";
+}
 
-  // Aggregate totals across all days in range
-  const totals = rows.reduce((acc, r) => ({
+// Shared transactions table used by Daily, Monthly, Yearly
+function TransactionsTable({ transactions, onExport }) {
+  const [search, setSearch] = useState("");
+  const filtered = transactions.filter(t =>
+    t.client_name?.toLowerCase().includes(search.toLowerCase()) ||
+    String(t.sales_ID).includes(search)
+  );
+  return (
+    <div className="flex flex-col gap-3">
+      <div className="flex items-center justify-between">
+        <h3 className="text-sm font-bold text-slate-700 uppercase tracking-wide">
+          Transaction List
+          <span className="ml-2 text-xs font-normal text-slate-400 normal-case">({filtered.length} rows)</span>
+        </h3>
+        <div className="flex items-center gap-2">
+          <input
+            type="text"
+            placeholder="Search client or sale #..."
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+            className="border border-slate-200 rounded-lg px-3 py-1.5 text-xs text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-400 w-48"
+          />
+          {onExport && (
+            <button onClick={onExport} className="text-xs font-semibold text-blue-600 hover:text-blue-800 border border-blue-200 hover:bg-blue-50 px-3 py-1.5 rounded-lg transition-colors whitespace-nowrap">
+              Export CSV
+            </button>
+          )}
+        </div>
+      </div>
+      <div className="border border-slate-100 rounded-xl overflow-hidden">
+        <div className="max-h-80 overflow-y-auto">
+          <table className="w-full text-sm">
+            <thead className="bg-slate-50 sticky top-0">
+              <tr>
+                {["Sale #", "Client", "Date", "Total Amount", "Balance", "Payment"].map(h => (
+                  <th key={h} className="text-left px-4 py-2.5 text-xs font-bold text-slate-500 uppercase tracking-wide">{h}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {filtered.length === 0 ? (
+                <tr><td colSpan={6} className="px-4 py-8 text-center text-slate-400 text-sm italic">No transactions found.</td></tr>
+              ) : filtered.map((t, i) => (
+                <tr key={i} className="border-t border-slate-50 hover:bg-slate-50">
+                  <td className="px-4 py-3 font-semibold text-blue-600">ORD-{t.sales_ID}</td>
+                  <td className="px-4 py-3 font-medium text-slate-700">{t.client_name}</td>
+                  <td className="px-4 py-3 text-slate-500 whitespace-nowrap">
+                    {new Date(t.sales_createdAt).toLocaleDateString("en-PH", { month: "short", day: "numeric", year: "numeric" })}
+                  </td>
+                  <td className="px-4 py-3 font-semibold text-slate-800">₱{fmt(t.sales_totalAmount)}</td>
+                  <td className="px-4 py-3 text-red-600">₱{fmt(t.sales_Balance)}</td>
+                  <td className="px-4 py-3">
+                    <span className={"text-xs font-semibold px-2.5 py-1 rounded-full " + paymentBadge(t.sales_paymentStatus)}>
+                      {t.sales_paymentStatus}
+                    </span>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function DailyResult({ data }) {
+  const summary = Array.isArray(data.summary) ? data.summary : [];
+  const transactions = Array.isArray(data.transactions) ? data.transactions : [];
+
+  if (!summary.length && !transactions.length)
+    return <EmptyState message="No sales found for this date range." />;
+
+  const totals = summary.reduce((acc, r) => ({
     total_transactions: acc.total_transactions + Number(r.total_transactions || 0),
     total_sales:        acc.total_sales        + Number(r.total_sales || 0),
     total_collected:    acc.total_collected    + Number(r.total_collected || 0),
@@ -98,107 +172,114 @@ function DailyResult({ data }) {
   }), { total_transactions: 0, total_sales: 0, total_collected: 0, total_outstanding: 0, unpaid_count: 0, partial_count: 0 });
 
   return (
-    <div className="flex flex-col gap-4">
-      {/* Summary totals */}
+    <div className="flex flex-col gap-6">
       <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-        <StatCard label="Total Sales"      value={"P" + fmt(totals.total_sales)}      color="text-green-600" />
+        <StatCard label="Total Sales"      value={"₱" + fmt(totals.total_sales)}      color="text-green-600" />
         <StatCard label="Transactions"     value={totals.total_transactions}           color="text-blue-600" />
-        <StatCard label="Collected"        value={"P" + fmt(totals.total_collected)}   color="text-blue-600" />
-        <StatCard label="Outstanding"      value={"P" + fmt(totals.total_outstanding)} color="text-red-600" />
+        <StatCard label="Collected"        value={"₱" + fmt(totals.total_collected)}   color="text-blue-600" />
+        <StatCard label="Outstanding"      value={"₱" + fmt(totals.total_outstanding)} color="text-red-600" />
         <StatCard label="Unpaid Sales"     value={totals.unpaid_count}                color="text-red-500" />
         <StatCard label="Partial Payments" value={totals.partial_count}               color="text-amber-600" />
       </div>
 
-      {/* Per-day breakdown if range spans multiple days */}
-      {rows.length > 1 && (
+      {summary.length > 1 && (
         <div>
-          <SectionHeader title="Per Day Breakdown" count={rows.length} onExport={() => exportCSV(rows, "daily_report")} />
-          <div className="border border-slate-100 rounded-xl overflow-hidden">
-            <table className="w-full text-sm">
-              <thead className="bg-slate-50">
-                <tr>
-                  {["Date", "Transactions", "Total Sales", "Collected", "Outstanding"].map((h) => (
-                    <th key={h} className="text-left px-4 py-2.5 text-xs font-bold text-slate-500 uppercase tracking-wide">{h}</th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {rows.map((r, i) => (
-                  <tr key={i} className="border-t border-slate-50 hover:bg-slate-50">
-                    <td className="px-4 py-3 font-medium text-slate-700">
-                      {new Date(r.sale_date).toLocaleDateString("en-PH", { month: "short", day: "numeric", year: "numeric" })}
-                    </td>
-                    <td className="px-4 py-3 text-slate-600">{r.total_transactions}</td>
-                    <td className="px-4 py-3 font-semibold text-green-700">P{fmt(r.total_sales)}</td>
-                    <td className="px-4 py-3 text-blue-600">P{fmt(r.total_collected)}</td>
-                    <td className="px-4 py-3 text-red-600">P{fmt(r.total_outstanding)}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+          <SectionHeader title="Per Day Breakdown" count={summary.length} onExport={() => exportCSV(summary, "daily_summary")} />
+          <TableWrapper headers={["Date", "Transactions", "Total Sales", "Collected", "Outstanding"]}>
+            {summary.map((r, i) => (
+              <tr key={i} className="border-t border-slate-50 hover:bg-slate-50">
+                <td className="px-4 py-3 font-medium text-slate-700">
+                  {new Date(r.sale_date).toLocaleDateString("en-PH", { month: "short", day: "numeric", year: "numeric" })}
+                </td>
+                <td className="px-4 py-3 text-slate-600">{r.total_transactions}</td>
+                <td className="px-4 py-3 font-semibold text-green-700">₱{fmt(r.total_sales)}</td>
+                <td className="px-4 py-3 text-blue-600">₱{fmt(r.total_collected)}</td>
+                <td className="px-4 py-3 text-red-600">₱{fmt(r.total_outstanding)}</td>
+              </tr>
+            ))}
+          </TableWrapper>
         </div>
       )}
+
+      <TransactionsTable transactions={transactions} onExport={() => exportCSV(transactions, "daily_transactions")} />
     </div>
   );
 }
 
 function MonthlyResult({ data }) {
-  if (!Array.isArray(data) || !data.length) return <EmptyState message="No monthly data found." />;
+  const summary = Array.isArray(data.summary) ? data.summary : [];
+  const transactions = Array.isArray(data.transactions) ? data.transactions : [];
+
+  if (!summary.length && !transactions.length)
+    return <EmptyState message="No monthly data found." />;
+
   return (
-    <div>
-      <SectionHeader title="Monthly Breakdown" count={data.length} onExport={() => exportCSV(data, "monthly_report")} />
-      <TableWrapper headers={["Month", "Transactions", "Total Sales", "Collected", "Outstanding"]}>
-        {data.map((r, i) => (
-          <tr key={i} className="border-t border-slate-50 hover:bg-slate-50">
-            <td className="px-4 py-3 font-medium text-slate-700">
-              {new Date(r.year, r.month - 1).toLocaleDateString("en-PH", { month: "long", year: "numeric" })}
-            </td>
-            <td className="px-4 py-3 text-slate-600">{r.total_transactions}</td>
-            <td className="px-4 py-3 font-semibold text-green-700">P{fmt(r.total_sales)}</td>
-            <td className="px-4 py-3 text-blue-600">P{fmt(r.total_collected)}</td>
-            <td className="px-4 py-3 text-red-600">P{fmt(r.total_outstanding)}</td>
-          </tr>
-        ))}
-      </TableWrapper>
+    <div className="flex flex-col gap-6">
+      <div>
+        <SectionHeader title="Monthly Breakdown" count={summary.length} onExport={() => exportCSV(summary, "monthly_summary")} />
+        <TableWrapper headers={["Month", "Transactions", "Total Sales", "Collected", "Outstanding"]}>
+          {summary.map((r, i) => (
+            <tr key={i} className="border-t border-slate-50 hover:bg-slate-50">
+              <td className="px-4 py-3 font-medium text-slate-700">
+                {new Date(r.year, r.month - 1).toLocaleDateString("en-PH", { month: "long", year: "numeric" })}
+              </td>
+              <td className="px-4 py-3 text-slate-600">{r.total_transactions}</td>
+              <td className="px-4 py-3 font-semibold text-green-700">₱{fmt(r.total_sales)}</td>
+              <td className="px-4 py-3 text-blue-600">₱{fmt(r.total_collected)}</td>
+              <td className="px-4 py-3 text-red-600">₱{fmt(r.total_outstanding)}</td>
+            </tr>
+          ))}
+        </TableWrapper>
+      </div>
+      <TransactionsTable transactions={transactions} onExport={() => exportCSV(transactions, "monthly_transactions")} />
     </div>
   );
 }
 
 function RevenueResult({ data }) {
-  if (!Array.isArray(data) || !data.length) return <EmptyState message="No revenue data found." />;
-  const totalRevenue   = data.reduce((s, r) => s + Number(r.total_sales || 0), 0);
-  const totalCollected = data.reduce((s, r) => s + Number(r.total_collected || 0), 0);
+  const summary = Array.isArray(data.summary) ? data.summary : [];
+  const transactions = Array.isArray(data.transactions) ? data.transactions : [];
+
+  if (!summary.length && !transactions.length)
+    return <EmptyState message="No revenue data found." />;
+
+  const totalRevenue   = summary.reduce((s, r) => s + Number(r.total_sales || 0), 0);
+  const totalCollected = summary.reduce((s, r) => s + Number(r.total_collected || 0), 0);
+
   return (
-    <div className="flex flex-col gap-4">
+    <div className="flex flex-col gap-6">
       <div className="grid grid-cols-2 gap-3">
-        <StatCard label="Total Revenue"   value={"P" + fmt(totalRevenue)}   color="text-green-600" />
-        <StatCard label="Total Collected" value={"P" + fmt(totalCollected)} color="text-blue-600" />
+        <StatCard label="Total Revenue"   value={"₱" + fmt(totalRevenue)}   color="text-green-600" />
+        <StatCard label="Total Collected" value={"₱" + fmt(totalCollected)} color="text-blue-600" />
       </div>
-      <SectionHeader title="Yearly Breakdown" count={data.length} onExport={() => exportCSV(data, "revenue_report")} />
-      <TableWrapper headers={["Year", "Transactions", "Total Revenue", "Collected", "Outstanding"]}>
-        {data.map((r, i) => (
-          <tr key={i} className="border-t border-slate-50 hover:bg-slate-50">
-            <td className="px-4 py-3 font-bold text-slate-800">{r.year}</td>
-            <td className="px-4 py-3 text-slate-600">{r.total_transactions}</td>
-            <td className="px-4 py-3 font-semibold text-green-700">P{fmt(r.total_sales)}</td>
-            <td className="px-4 py-3 text-blue-600">P{fmt(r.total_collected)}</td>
-            <td className="px-4 py-3 text-red-600">P{fmt(r.total_outstanding)}</td>
-          </tr>
-        ))}
-      </TableWrapper>
+      <div>
+        <SectionHeader title="Yearly Breakdown" count={summary.length} onExport={() => exportCSV(summary, "yearly_summary")} />
+        <TableWrapper headers={["Year", "Transactions", "Total Revenue", "Collected", "Outstanding"]}>
+          {summary.map((r, i) => (
+            <tr key={i} className="border-t border-slate-50 hover:bg-slate-50">
+              <td className="px-4 py-3 font-bold text-slate-800">{r.year}</td>
+              <td className="px-4 py-3 text-slate-600">{r.total_transactions}</td>
+              <td className="px-4 py-3 font-semibold text-green-700">₱{fmt(r.total_sales)}</td>
+              <td className="px-4 py-3 text-blue-600">₱{fmt(r.total_collected)}</td>
+              <td className="px-4 py-3 text-red-600">₱{fmt(r.total_outstanding)}</td>
+            </tr>
+          ))}
+        </TableWrapper>
+      </div>
+      <TransactionsTable transactions={transactions} onExport={() => exportCSV(transactions, "yearly_transactions")} />
     </div>
   );
 }
 
 function TopProductsResult({ data }) {
-  if (!Array.isArray(data) || !data.length) return <EmptyState message="No product data found." />;
-  const max = Math.max(...data.map((p) => Number(p.total_qty_sold || 0)));
+  const rows = Array.isArray(data) ? data : (Array.isArray(data?.summary) ? data.summary : []);
+  if (!rows.length) return <EmptyState message="No product data found." />;
+  const max = Math.max(...rows.map((p) => Number(p.total_qty_sold || 0)));
   return (
     <div>
-      <SectionHeader title="Top Products by Volume" count={data.length} onExport={() => exportCSV(data, "top_products")} />
+      <SectionHeader title="Top Products by Volume" count={rows.length} onExport={() => exportCSV(rows, "top_products")} />
       <div className="flex flex-col gap-2">
-        {data.map((p, i) => {
+        {rows.map((p, i) => {
           const qty = Number(p.total_qty_sold || 0);
           const pct = max > 0 ? (qty / max) * 100 : 0;
           return (
@@ -213,7 +294,7 @@ function TopProductsResult({ data }) {
                   <div className="bg-blue-500 h-1.5 rounded-full" style={{ width: pct + "%" }} />
                 </div>
               </div>
-              <span className="text-xs text-slate-500 shrink-0">P{fmt(p.total_revenue)}</span>
+              <span className="text-xs text-slate-500 shrink-0">₱{fmt(p.total_revenue)}</span>
             </div>
           );
         })}
@@ -223,43 +304,40 @@ function TopProductsResult({ data }) {
 }
 
 function InventoryResult({ data }) {
-  if (!Array.isArray(data) || !data.length) return <EmptyState message="No inventory data found." />;
+  const rows = Array.isArray(data) ? data : [];
+  if (!rows.length) return <EmptyState message="No inventory data found." />;
   const LOW = 10;
-  const totalValue = data.reduce((s, p) => s + Number(p.inventory_value || 0), 0);
-  const lowCount   = data.filter((p) => Number(p.product_stockQty) <= LOW && Number(p.product_stockQty) > 0).length;
-  const outCount   = data.filter((p) => Number(p.product_stockQty) <= 0).length;
+  const totalValue = rows.reduce((s, p) => s + Number(p.inventory_value || 0), 0);
+  const lowCount   = rows.filter((p) => Number(p.product_stockQty) <= LOW && Number(p.product_stockQty) > 0).length;
+  const outCount   = rows.filter((p) => Number(p.product_stockQty) <= 0).length;
   return (
     <div className="flex flex-col gap-4">
       <div className="grid grid-cols-3 gap-3">
-        <StatCard label="Total Products" value={data.length} color="text-blue-600" />
+        <StatCard label="Total Products" value={rows.length} color="text-blue-600" />
         <StatCard label="Low Stock"      value={lowCount}    color="text-amber-600" />
         <StatCard label="Out of Stock"   value={outCount}    color="text-red-600" />
       </div>
-      <SectionHeader title="Stock Levels" count={data.length} onExport={() => exportCSV(data, "inventory_report")} />
+      <SectionHeader title="Stock Levels" count={rows.length} onExport={() => exportCSV(rows, "inventory_report")} />
       <TableWrapper
         headers={["Product", "Stock (cases)", "Unit Price", "Value", "Status"]}
         footer={
           <tr>
             <td colSpan={3} className="px-4 py-3 text-xs font-bold text-slate-500 uppercase">Total Inventory Value</td>
-            <td className="px-4 py-3 font-bold text-green-700">P{fmt(totalValue)}</td>
+            <td className="px-4 py-3 font-bold text-green-700">₱{fmt(totalValue)}</td>
             <td />
           </tr>
         }
       >
-        {data.map((p, i) => {
+        {rows.map((p, i) => {
           const qty = Number(p.product_stockQty);
-          const badge = qty <= 0
-            ? "bg-red-100 text-red-700"
-            : qty <= LOW
-            ? "bg-amber-100 text-amber-700"
-            : "bg-green-100 text-green-700";
+          const badge = qty <= 0 ? "bg-red-100 text-red-700" : qty <= LOW ? "bg-amber-100 text-amber-700" : "bg-green-100 text-green-700";
           const label = qty <= 0 ? "Out of Stock" : qty <= LOW ? "Low Stock" : "In Stock";
           return (
             <tr key={i} className="border-t border-slate-50 hover:bg-slate-50">
               <td className="px-4 py-3 font-medium text-slate-700">{p.product_name}</td>
               <td className="px-4 py-3 font-semibold text-slate-800">{qty.toLocaleString()}</td>
-              <td className="px-4 py-3 text-slate-600">P{fmt(p.product_unitPrice)}</td>
-              <td className="px-4 py-3 text-slate-600">P{fmt(p.inventory_value)}</td>
+              <td className="px-4 py-3 text-slate-600">₱{fmt(p.product_unitPrice)}</td>
+              <td className="px-4 py-3 text-slate-600">₱{fmt(p.inventory_value)}</td>
               <td className="px-4 py-3">
                 <span className={"text-xs font-semibold px-2.5 py-1 rounded-full " + badge}>{label}</span>
               </td>
@@ -272,8 +350,9 @@ function InventoryResult({ data }) {
 }
 
 function AgingResult({ data }) {
-  if (!Array.isArray(data) || !data.length) return <EmptyState message="No outstanding balances found." />;
-  const total = data.reduce((s, r) => s + Number(r.outstanding_balance || 0), 0);
+  const rows = Array.isArray(data) ? data : [];
+  if (!rows.length) return <EmptyState message="No outstanding balances found." />;
+  const total = rows.reduce((s, r) => s + Number(r.outstanding_balance || 0), 0);
   function agingBucket(days) {
     if (days <= 30) return ["0-30 days",  "bg-green-100 text-green-700"];
     if (days <= 60) return ["31-60 days", "bg-amber-100 text-amber-700"];
@@ -283,21 +362,21 @@ function AgingResult({ data }) {
   return (
     <div className="flex flex-col gap-4">
       <div className="grid grid-cols-2 gap-3">
-        <StatCard label="Clients with Balance" value={data.length}       color="text-red-600" />
-        <StatCard label="Total Outstanding"     value={"P" + fmt(total)} color="text-red-600" />
+        <StatCard label="Clients with Balance" value={rows.length}       color="text-red-600" />
+        <StatCard label="Total Outstanding"     value={"₱" + fmt(total)} color="text-red-600" />
       </div>
-      <SectionHeader title="Receivables Aging" count={data.length} onExport={() => exportCSV(data, "aging_report")} />
+      <SectionHeader title="Receivables Aging" count={rows.length} onExport={() => exportCSV(rows, "aging_report")} />
       <TableWrapper
         headers={["Client", "Sale #", "Sale Date", "Days Overdue", "Balance", "Bucket"]}
         footer={
           <tr>
             <td colSpan={4} className="px-4 py-3 text-xs font-bold text-slate-500 uppercase">Total Outstanding</td>
-            <td className="px-4 py-3 font-bold text-red-700">P{fmt(total)}</td>
+            <td className="px-4 py-3 font-bold text-red-700">₱{fmt(total)}</td>
             <td />
           </tr>
         }
       >
-        {data.map((r, i) => {
+        {rows.map((r, i) => {
           const days = Number(r.days_overdue || 0);
           const [bucket, bucketStyle] = agingBucket(days);
           return (
@@ -308,7 +387,7 @@ function AgingResult({ data }) {
                 {new Date(r.sales_createdAt).toLocaleDateString("en-PH", { month: "short", day: "numeric", year: "numeric" })}
               </td>
               <td className="px-4 py-3 text-slate-700">{days} days</td>
-              <td className="px-4 py-3 font-bold text-red-600">P{fmt(r.outstanding_balance)}</td>
+              <td className="px-4 py-3 font-bold text-red-600">₱{fmt(r.outstanding_balance)}</td>
               <td className="px-4 py-3">
                 <span className={"text-xs font-semibold px-2.5 py-1 rounded-full " + bucketStyle}>{bucket}</span>
               </td>
@@ -321,47 +400,132 @@ function AgingResult({ data }) {
 }
 
 function CustomersResult({ data }) {
-  if (!Array.isArray(data) || !data.length) return <EmptyState message="No customer data found." />;
+  const rows = Array.isArray(data) ? data : [];
+  const [clients, setClients]               = useState([]);
+  const [selectedClient, setSelectedClient] = useState("");
+  const [payments, setPayments]             = useState([]);
+  const [loadingPay, setLoadingPay]         = useState(false);
+  const [payError, setPayError]             = useState("");
+
+  useEffect(() => {
+    fetch("/api/reports/customers/list")
+      .then(r => r.json())
+      .then(d => setClients(Array.isArray(d) ? d : []));
+  }, []);
+
+  const loadPayments = async (clientId) => {
+    setSelectedClient(clientId);
+    setPayments([]);
+    setPayError("");
+    if (!clientId) return;
+    setLoadingPay(true);
+    try {
+      const res = await fetch(`/api/reports/customers/payments?client_ID=${clientId}`);
+      const d = await res.json();
+      if (!res.ok) throw new Error(d.error);
+      setPayments(Array.isArray(d) ? d : []);
+    } catch (err) {
+      setPayError(err.message);
+    } finally {
+      setLoadingPay(false);
+    }
+  };
+
+  if (!rows.length) return <EmptyState message="No customer data found." />;
+
   return (
-    <div>
-      <SectionHeader title="Customer Purchase History" count={data.length} onExport={() => exportCSV(data, "customer_report")} />
-      <TableWrapper headers={["Customer", "Total Orders", "Total Purchased", "Total Paid", "Outstanding"]}>
-        {data.map((r, i) => (
-          <tr key={i} className="border-t border-slate-50 hover:bg-slate-50">
-            <td className="px-4 py-3 font-medium text-slate-700">{r.client_name}</td>
-            <td className="px-4 py-3 text-slate-600">{r.total_orders}</td>
-            <td className="px-4 py-3 font-semibold text-slate-800">P{fmt(r.total_purchased)}</td>
-            <td className="px-4 py-3 text-green-600">P{fmt(r.total_paid)}</td>
-            <td className="px-4 py-3">
-              <span className={Number(r.outstanding_balance) > 0 ? "font-bold text-red-600" : "text-slate-400"}>
-                P{fmt(r.outstanding_balance)}
-              </span>
-            </td>
-          </tr>
-        ))}
-      </TableWrapper>
+    <div className="flex flex-col gap-6">
+      <div>
+        <SectionHeader title="Customer Purchase Summary" count={rows.length} onExport={() => exportCSV(rows, "customer_report")} />
+        <TableWrapper headers={["Customer", "Total Orders", "Total Purchased", "Total Paid", "Outstanding", "Last Transaction"]}>
+          {rows.map((r, i) => (
+            <tr key={i} className="border-t border-slate-50 hover:bg-slate-50">
+              <td className="px-4 py-3 font-medium text-slate-700">{r.client_name}</td>
+              <td className="px-4 py-3 text-slate-600">{r.total_orders}</td>
+              <td className="px-4 py-3 font-semibold text-slate-800">₱{fmt(r.total_purchased)}</td>
+              <td className="px-4 py-3 text-green-600">₱{fmt(r.total_paid)}</td>
+              <td className="px-4 py-3">
+                <span className={Number(r.outstanding_balance) > 0 ? "font-bold text-red-600" : "text-slate-400"}>
+                  ₱{fmt(r.outstanding_balance)}
+                </span>
+              </td>
+              <td className="px-4 py-3 text-slate-500 text-xs">
+                {r.last_transaction ? new Date(r.last_transaction).toLocaleDateString("en-PH", { month: "short", day: "numeric", year: "numeric" }) : "—"}
+              </td>
+            </tr>
+          ))}
+        </TableWrapper>
+      </div>
+
+      <div className="flex flex-col gap-3">
+        <h3 className="text-sm font-bold text-slate-700 uppercase tracking-wide">Payment History by Customer</h3>
+        <select
+          className="w-full max-w-xs border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-800 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+          value={selectedClient}
+          onChange={e => loadPayments(e.target.value)}
+        >
+          <option value="">Select a customer...</option>
+          {clients.map(c => (
+            <option key={c.client_ID} value={c.client_ID}>{c.client_name}</option>
+          ))}
+        </select>
+
+        {loadingPay && <div className="text-sm text-slate-400 italic">Loading payments...</div>}
+        {payError && <div className="text-sm text-red-600">{payError}</div>}
+
+        {selectedClient && !loadingPay && (
+          payments.length === 0
+            ? <EmptyState message="No payment records found for this customer." />
+            : (
+              <div>
+                <SectionHeader
+                  title={`${clients.find(c => String(c.client_ID) === String(selectedClient))?.client_name} — Payments`}
+                  count={payments.length}
+                  onExport={() => exportCSV(payments, "customer_payments")}
+                />
+                <TableWrapper headers={["OR #", "Date", "Type", "Amount Paid", "Sale #", "Sale Total", "Remaining Balance"]}>
+                  {payments.map((p, i) => (
+                    <tr key={i} className="border-t border-slate-50 hover:bg-slate-50">
+                      <td className="px-4 py-3 text-slate-600">{p.payment_ORNumber || "—"}</td>
+                      <td className="px-4 py-3 text-slate-500 whitespace-nowrap">
+                        {new Date(p.payment_paidDate).toLocaleDateString("en-PH", { month: "short", day: "numeric", year: "numeric" })}
+                      </td>
+                      <td className="px-4 py-3 text-slate-600">{p.payment_type}</td>
+                      <td className="px-4 py-3 font-semibold text-green-700">₱{fmt(p.payment_amount)}</td>
+                      <td className="px-4 py-3 font-semibold text-blue-600">ORD-{p.sales_ID}</td>
+                      <td className="px-4 py-3 text-slate-600">₱{fmt(p.sales_totalAmount)}</td>
+                      <td className="px-4 py-3">
+                        <span className={Number(p.remaining_balance) > 0 ? "font-bold text-red-600" : "text-green-600 font-semibold"}>
+                          ₱{fmt(p.remaining_balance)}
+                        </span>
+                      </td>
+                    </tr>
+                  ))}
+                </TableWrapper>
+              </div>
+            )
+        )}
+      </div>
     </div>
   );
 }
 
 export default function ReportsPage() {
   const [activeType, setActiveType] = useState("daily");
-  const [date, setDate]             = useState(today);
   const [month, setMonth]           = useState(thisMonth);
   const [year, setYear]             = useState(thisYear);
   const [loading, setLoading]       = useState(false);
   const [result, setResult]         = useState(null);
   const [error, setError]           = useState("");
-  const [startDate, setStartDate] = useState(today);
-  const [endDate, setEndDate]     = useState(today);
-
+  const [startDate, setStartDate]   = useState(today);
+  const [endDate, setEndDate]       = useState(today);
 
   const years = Array.from({ length: 6 }, (_, i) => String(new Date().getFullYear() - i));
 
   function buildUrl() {
-    if (activeType === "daily") return `/api/reports/daily?start=${startDate}&end=${endDate}`;
-    if (activeType === "monthly")      return "/api/reports/monthly?month=" + month;
-    if (activeType === "revenue")      return "/api/reports/yearly?year=" + year;
+    if (activeType === "daily")        return `/api/reports/daily?start=${startDate}&end=${endDate}`;
+    if (activeType === "monthly")      return `/api/reports/monthly?month=${month}`;
+    if (activeType === "revenue")      return `/api/reports/yearly?year=${year}`;
     if (activeType === "top-products") return "/api/reports/top-products";
     if (activeType === "inventory")    return "/api/reports/inventory";
     if (activeType === "aging")        return "/api/reports/aging";
@@ -387,6 +551,7 @@ export default function ReportsPage() {
     }
   }
 
+
   function renderResult() {
     if (!result) return null;
     if (activeType === "daily")        return <DailyResult        data={result} />;
@@ -404,7 +569,6 @@ export default function ReportsPage() {
 
   return (
     <div className="flex flex-col gap-6">
-
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold text-slate-800">Reports</h1>
@@ -412,7 +576,6 @@ export default function ReportsPage() {
         </div>
       </div>
 
-      {/* Type Cards */}
       <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
         {REPORT_TYPES.map((r) => (
           <button
@@ -424,26 +587,18 @@ export default function ReportsPage() {
                 : "border-slate-100 bg-white hover:border-blue-300"
             )}
           >
-            <div className="text-4xl mb-3 transform group-hover:scale-110 transition-transform">
-              {r.icon}
-            </div>
-            <div className="text-sm font-bold text-slate-800 leading-tight">
-              {r.title}
-            </div>
-            <div className="text-[10px] text-slate-400 mt-2 opacity-0 group-hover:opacity-100 transition-opacity hidden sm:block">
-              Click to view
-            </div>
+            <div className="text-4xl mb-3 transform group-hover:scale-110 transition-transform">{r.icon}</div>
+            <div className="text-sm font-bold text-slate-800 leading-tight">{r.title}</div>
+            <div className="text-[10px] text-slate-400 mt-2 opacity-0 group-hover:opacity-100 transition-opacity hidden sm:block">Click to view</div>
           </button>
         ))}
       </div>
 
-      {/* Generator Panel */}
       <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-6">
         <div className="mb-4">
           <h2 className="text-base font-bold text-slate-800">{active?.icon} {active?.title}</h2>
           <p className="text-xs text-slate-500 mt-0.5">{active?.desc}</p>
         </div>
-
         <div className="flex flex-wrap gap-3 mb-5">
           {activeType === "daily" && (
             <div className="flex flex-wrap gap-3">
@@ -477,20 +632,14 @@ export default function ReportsPage() {
             <p className="text-sm text-slate-400 self-center italic">Shows all current data — no date filter needed.</p>
           )}
         </div>
-
-        <button
-          onClick={handleGenerate}
-          disabled={loading}
-          className="bg-green-600 hover:bg-green-700 disabled:opacity-50 text-white font-semibold px-6 py-2.5 rounded-lg text-sm transition-colors"
-        >
+        <button onClick={handleGenerate} disabled={loading}
+          className="bg-green-600 hover:bg-green-700 disabled:opacity-50 text-white font-semibold px-6 py-2.5 rounded-lg text-sm transition-colors">
           {loading ? "Generating..." : "Generate Report"}
         </button>
       </div>
 
       {error && (
-        <div className="bg-red-50 border border-red-200 text-red-700 rounded-xl px-5 py-4 text-sm">
-          {error}
-        </div>
+        <div className="bg-red-50 border border-red-200 text-red-700 rounded-xl px-5 py-4 text-sm">{error}</div>
       )}
 
       {result && !loading && (

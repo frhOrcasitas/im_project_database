@@ -25,13 +25,12 @@ function WarehouseDamageModal({ products, onClose, onSuccess }) {
   const [error,      setError]      = useState("");
 
   useEffect(() => {
-    // Fetch employee data and filter for managers and active employees
     fetch("/api/employee")
       .then(res => res.json())
       .then(data => {
         const all = Array.isArray(data) ? data : [];
-        setManagers(all.filter(e => Number(e.isManager) === 1 || e.role === "Manager"));
-        setEmployees(all.filter(e => e.employee_status === "Active" || e.status === "Active"));
+        setManagers(all.filter(e => Number(e.isManager) === 1));
+        setEmployees(all.filter(e => e.employee_status === "Active"));
       })
       .catch(err => console.error("Error fetching employees:", err));
   }, []);
@@ -41,8 +40,9 @@ function WarehouseDamageModal({ products, onClose, onSuccess }) {
   const updateItem = (idx, key, val) => setItems(i => i.map((item, j) => j === idx ? { ...item, [key]: val } : item));
 
   const handleSubmit = async () => {
-    if (!form.manager_id)  return setError("Select a manager.");
-    if (!form.employee_id) return setError("Select an employee.");
+    console.log("FORM STATE:", form);
+    if (!form.manager_id || form.manager_id === "0") return setError("Select a manager.");
+    if (!form.employee_id || form.employee_id === "0") return setError("Select an employee.");
     if (items.some(i => !i.product_ID)) return setError("Select a product for each item.");
 
     setSubmitting(true);
@@ -97,15 +97,18 @@ function WarehouseDamageModal({ products, onClose, onSuccess }) {
               <label className="text-xs font-bold text-slate-500 uppercase tracking-wide block mb-1.5">Manager <span className="text-red-400">*</span></label>
               <select className={inputCls} value={form.manager_id} onChange={e => setForm(f => ({ ...f, manager_id: e.target.value }))}>
                 <option value="">Select manager...</option>
-                {managers.map(m => <option key={m.employee_ID} value={m.employee_ID}>{m.employee_name}</option>)}
+                {managers.map(m => (
+                  <option key={m.manager_ID} value={m.manager_ID}>{m.employee_name}</option>
+                ))}
               </select>
             </div>
             <div>
               <label className="text-xs font-bold text-slate-500 uppercase tracking-wide block mb-1.5">Reported By <span className="text-red-400">*</span></label>
               <select className={inputCls} value={form.employee_id} onChange={e => setForm(f => ({ ...f, employee_id: e.target.value }))}>
                 <option value="">Select employee...</option>
-                {employees.map(e => <option key={e.employee_ID} value={e.employee_ID}>{e.employee_name}</option>)}
-              </select>
+                {employees
+                  .filter(e => e.employee_ID !== 0)
+                  .map(e => <option key={e.employee_ID} value={e.employee_ID}>{e.employee_name}</option>)}              </select>
             </div>
           </div>
 
@@ -674,7 +677,7 @@ export default function Inventory() {
                     </td>
                     <td className="px-6 py-4 text-right">
                       <div className="flex justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                        <button className="p-1.5 hover:bg-blue-50 text-blue-600 rounded-md text-sm" onClick={() => setEditItem(p)}>Edit</button>
+                        <button className="p-1.5 hover:bg-blue-50 text-blue-600 rounded-md text-sm" onClick={() => setEditItem({ ...p, product_unitPrice: p.product_unitPrice ?? "" })}>Edit</button>
                         <button className="p-1.5 hover:bg-green-50 text-green-600 rounded-md text-sm" onClick={() => setRestockItem(p)}>Stock</button>
                       </div>
                     </td>
@@ -869,6 +872,11 @@ export default function Inventory() {
                 <label className="text-[10px] font-bold text-slate-400 uppercase">Unit</label>
                 <input type="text" className="w-full border p-2 rounded-lg text-black" required
                   value={editItem.product_unit} onChange={e => setEditItem({ ...editItem, product_unit: e.target.value })} />
+              </div>
+              <div>
+                <label className="text-[10px] font-bold text-slate-400 uppercase">Unit Price (₱)</label>
+                <input type="number" step="0.01" min="0" className="w-full border p-2 rounded-lg text-black" required
+                  value={editItem.product_unitPrice ?? ""} onChange={e => setEditItem({ ...editItem, product_unitPrice: e.target.value })} />
               </div>
               <div className="flex gap-2 mt-2">
                 <button type="button" onClick={() => setEditItem(null)} className="flex-1 py-2 bg-slate-100 rounded-lg text-black">Cancel</button>

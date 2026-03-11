@@ -49,13 +49,13 @@ export async function GET() {
 export async function PUT(req) {
   try {
     const body = await req.json();
-    const { product_ID, product_name, product_sellingPrice, product_reorderPoint, product_unit } = body;
+    const { product_ID, product_name, product_sellingPrice, product_unitPrice, product_reorderPoint, product_unit } = body;
 
     await pool.query(
       `UPDATE tbl_product 
        SET product_name = ?, product_unitPrice = ?, product_reorderLevel = ?, product_unitOfMeasure = ? 
        WHERE product_ID = ?`,
-      [product_name, product_sellingPrice, product_reorderPoint, product_unit, product_ID]
+      [product_name, product_unitPrice ?? product_sellingPrice, product_reorderPoint, product_unit, product_ID]
     );
 
     return Response.json({ message: "Product updated successfully" });

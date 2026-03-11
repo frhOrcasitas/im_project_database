@@ -11,7 +11,7 @@ export async function GET() {
         SUM(s.sales_Balance)                       AS outstanding_balance,
         MAX(s.sales_createdAt)                     AS last_transaction
       FROM tbl_client c
-      LEFT JOIN tbl_sales s ON c.client_ID = s.client_ID
+      LEFT JOIN tbl_sales s ON c.client_ID = s.client_ID AND s.sales_status != 'Cancelled'
       GROUP BY c.client_ID, c.client_name
       ORDER BY total_purchased DESC
     `);
