@@ -319,6 +319,41 @@ function EmployeeForm({ initial, isEdit, onSubmit, onCancel, loading }) {
         </Field>
       )}
 
+      {isEdit && (
+        <div className="border-t border-slate-100 pt-4 flex flex-col gap-3">
+          <p className="text-xs font-bold text-slate-500 uppercase tracking-wide">System Access</p>
+          <Field label="System Role">
+            <select
+              className={inputCls}
+              value={form.system_role || ""}
+              onChange={(e) => set("system_role", e.target.value || null)}
+            >
+              <option value="">No system access</option>
+              <option value="Owner">Owner</option>
+              <option value="Manager">Manager</option>
+              <option value="Employee">Employee</option>
+            </select>
+          </Field>
+          <Field label="Username">
+            <input
+              className={inputCls}
+              placeholder="Login username"
+              value={form.username || ""}
+              onChange={(e) => set("username", e.target.value)}
+            />
+          </Field>
+          <Field label="Password">
+            <input
+              className={inputCls}
+              type="text"
+              placeholder="Leave blank to keep current"
+              value={form.password_hash || ""}
+              onChange={(e) => set("password_hash", e.target.value)}
+            />
+          </Field>
+        </div>
+      )}
+
       <div className="flex gap-3 pt-1">
         <button
           type="button"
@@ -408,6 +443,16 @@ function EmployeeDetail({ employee, onEdit, onDeactivate }) {
         <DetailRow label="Date Hired" value={fmtDate(employee.employee_dateHired)} />
         <DetailRow label="Birthdate" value={fmtDate(employee.employee_birthdate)} />
       </div>
+
+      {employee.system_role && (
+        <div className="bg-blue-50 border border-blue-100 rounded-xl px-4 py-3 shrink-0">
+          <p className="text-xs font-semibold text-blue-600 uppercase tracking-wide mb-2">System Access</p>
+          <div className="grid grid-cols-2 gap-3">
+            <DetailRow label="System Role" value={employee.system_role} />
+            <DetailRow label="Username" value={employee.username} />
+          </div>
+        </div>
+      )}
 
       {employee.isManager === 1 && (
         <div className="bg-violet-50 border border-violet-100 rounded-xl px-4 py-3 shrink-0">

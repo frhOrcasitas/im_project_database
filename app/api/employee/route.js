@@ -8,7 +8,9 @@ export async function GET() {
         CASE WHEN m.employee_ID IS NOT NULL AND m.manager_status = 'Active' THEN 1 ELSE 0 END AS isManager,
         m.manager_ID,
         m.manager_dateStarted,
-        m.manager_status
+        m.manager_status,
+        e.username,
+        e.system_role
       FROM tbl_employee e
       LEFT JOIN tbl_manager m ON e.employee_ID = m.employee_ID
       ORDER BY e.employee_name ASC
