@@ -67,7 +67,7 @@ export default function Customers() {
     setCustomerForm({
       id: customer.client_ID,
       name: customer.client_name,
-      contact: customer.contactPerson, // Verify if this key matches your DB
+      contact: customer.contactPerson, 
       phone: customer.client_contactNumber,
       email: customer.client_email || "",
       address: customer.client_address,
@@ -128,7 +128,7 @@ export default function Customers() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          client_id:   selected.client_ID,        // ← was missing entirely
+          client_id:   selected.client_ID,       
           employee_id: paymentForm.employee_id,
           amount:      parseFloat(paymentForm.amount),
           or_number:   paymentForm.or_number,
