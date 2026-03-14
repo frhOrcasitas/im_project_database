@@ -7,7 +7,6 @@ export async function POST(req) {
 
   try {
     const body = await req.json();
-    // Default damage_date to today if not provided by frontend
     const { shipment_ID, items, damage_date = new Date().toISOString().split('T')[0] } = body;
 
     if (!shipment_ID || !items?.length) {
@@ -54,8 +53,7 @@ export async function POST(req) {
       const currentStock = productRows[0].product_stockQty;
       const subtotal = Number(damage_quantity) * unitPrice;
 
-      // 3. Insert into tbl_damage_during (Matching your describe exactly)
-      // Note: damage_amount is NOT NULL in your schema, we use unitPrice
+      // 3. Insert into tbl_damage_during
       await connection.query(
         `INSERT INTO tbl_damage_during 
          (shipment_id, damage_date, productLine_id, damage_quantity, damage_amount, damage_subtotal, damage_description) 
