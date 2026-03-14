@@ -1,6 +1,7 @@
 import pool from "../../lib/db";
 
 export async function GET() {
+  
   try {
     const [rows] = await pool.query(`
       SELECT 
@@ -22,6 +23,8 @@ export async function GET() {
 }
 
 export async function POST(request) {
+
+
   try {
     const body = await request.json();
     const { 
