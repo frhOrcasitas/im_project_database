@@ -92,9 +92,7 @@ function SaleField({ label, required, children }) {
 const _inputCls  = "w-full border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition";
 const _selectCls = _inputCls + " bg-white";
 
-// ══════════════════════════════════════════════════════════════════════════════
 // MODAL 1 — NEW SALE
-// ══════════════════════════════════════════════════════════════════════════════
 function NewSaleModal({ open, onClose, onSuccess, clients = [], products = [] }) {
   const emptyItem = { productLine_ID: "", quantity: 1, unitPrice: "", unitType: "Cases", remainder: 0 };
  
@@ -559,12 +557,10 @@ function AddCustomerModal({ open, onClose, onSuccess }) {
   );
 }
 
-// ══════════════════════════════════════════════════════════════════════════════
 // MAIN EXPORT — QuickActions (drop-in replacement for the buttons section)
-// ══════════════════════════════════════════════════════════════════════════════
 export default function QuickActions() {
-  const [modal, setModal] = useState(null); // "sale" | "inventory" | "customer" | "report"
-  const [toast, setToast] = useState(null); // { message, type }
+  const [modal, setModal] = useState(null);
+  const [toast, setToast] = useState(null);
   const [clients, setClients] = useState([]);
   const [products, setProducts] = useState([]);
 
