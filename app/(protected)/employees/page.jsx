@@ -1,7 +1,7 @@
 "use client";
 import { useState, useEffect, useRef } from "react";
 
-// ─── Constants ────────────────────────────────────────────────────────────────
+// ─── Constants 
 const inputCls =
   "w-full border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition bg-white";
 
@@ -30,7 +30,7 @@ const ROLES = [
   "Owner",
 ];
 
-// ─── Field Wrapper ────────────────────────────────────────────────────────────
+// ─── Field Wrapper 
 function Field({ label, required, children }) {
   return (
     <div className="flex flex-col gap-1">
@@ -42,7 +42,7 @@ function Field({ label, required, children }) {
   );
 }
 
-// ─── Modal Shell ──────────────────────────────────────────────────────────────
+// ─── Modal Shell
 function Modal({ open, onClose, title, width, children }) {
   const overlayRef = useRef(null);
   const maxW = width || "max-w-lg";
@@ -77,7 +77,7 @@ function Modal({ open, onClose, title, width, children }) {
   );
 }
 
-// ─── Toast ────────────────────────────────────────────────────────────────────
+// ─── Toast
 function Toast({ message, type, onDone }) {
   useEffect(() => {
     const t = setTimeout(onDone, 3500);
@@ -121,7 +121,7 @@ function Avatar({ name, size }) {
   );
 }
 
-// ─── Status Badge ─────────────────────────────────────────────────────────────
+// ─── Status Badge
 function StatusBadge({ status }) {
   const style =
     status === "Active"
@@ -134,7 +134,7 @@ function StatusBadge({ status }) {
   );
 }
 
-// ─── Confirm Dialog ───────────────────────────────────────────────────────────
+// ─── Confirm Dialog 
 function ConfirmDialog({ open, onClose, onConfirm, employee, loading }) {
   const isDeactivating = employee?.employee_status === "Active";
   const actionLabel = isDeactivating ? "Deactivate" : "Reactivate";
@@ -177,7 +177,7 @@ function ConfirmDialog({ open, onClose, onConfirm, employee, loading }) {
   );
 }
 
-// ─── Employee Form ────────────────────────────────────────────────────────────
+// ─── Employee Form 
 function EmployeeForm({ initial, isEdit, onSubmit, onCancel, loading }) {
   const [form, setForm] = useState(initial || EMPTY_FORM);
   const set = (k, v) => setForm((f) => ({ ...f, [k]: v }));
@@ -376,7 +376,7 @@ function EmployeeForm({ initial, isEdit, onSubmit, onCancel, loading }) {
   );
 }
 
-// ─── Employee Detail Panel ────────────────────────────────────────────────────
+// ─── Employee Detail Panel
 function EmployeeDetail({ employee, onEdit, onDeactivate }) {
   if (!employee) {
     return (
@@ -475,9 +475,8 @@ function EmployeeDetail({ employee, onEdit, onDeactivate }) {
   );
 }
 
-// ══════════════════════════════════════════════════════════════════════════════
+
 // PAGE — default export last, nothing after it
-// ══════════════════════════════════════════════════════════════════════════════
 export default function EmployeesPage() {
   // 1. Core Data State
   const [employees, setEmployees] = useState([]);
@@ -513,7 +512,7 @@ export default function EmployeesPage() {
 
   useEffect(() => { fetchEmployees(); }, []);
 
-  // 5. DERIVED DATA (Fixed "roles" and "editInitial")
+  // 5. DERIVED DATA 
   const roles = ["all", ...new Set(employees.map((e) => e.employee_role).filter(Boolean))];
   const editInitial = selected ? { ...selected } : EMPTY_FORM;
 
