@@ -26,7 +26,7 @@ export async function POST(request) {
 
         // 3. Process Items & Deduct Stock
         for (const item of items) {
-            const productID = item.productLine_ID; // productLine_ID === product_ID in this schema
+            const productID = item.productLine_ID; 
 
             // Check item exists in sale
             const [sold] = await connection.query(
