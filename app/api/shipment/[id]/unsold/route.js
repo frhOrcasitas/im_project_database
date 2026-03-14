@@ -17,7 +17,6 @@ export async function POST(request, { params }) {
 
         for (const item of items) {
             // 2. Fetch the SOLD price to ensure we deduct the correct amount from their debt
-            // Prices change over time (your rule #1), so we look at tbl_sales_details
             const [soldInfo] = await connection.query(
                 `SELECT sd.salesDetail_unitPriceSold, s.sales_ID, s.client_ID 
                  FROM tbl_sales_details sd
@@ -45,7 +44,6 @@ export async function POST(request, { params }) {
                 );
 
                 // 5. Adjust Sales Balance (Rule: "Closely monitor balance")
-                // We reduce the total amount and the remaining balance
                 await connection.query(
                     `UPDATE tbl_sales 
                      SET sales_totalAmount = sales_totalAmount - ?, 
