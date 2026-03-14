@@ -8,23 +8,20 @@ export async function PATCH(req) {
     await connection.beginTransaction();
 
     // 1. Create the Header in tbl_inventory
-    // Schema check: Field names are inventory_date, manager_ID, and inventory_total
     const [invHeader] = await connection.query(
       `INSERT INTO tbl_inventory (inventory_date, manager_ID, inventory_total) 
        VALUES (CURDATE(), ?, ?)`,
-      [manager_id || 1, quantity * cost] // Using a default manager_ID of 1 for testing
+      [manager_id || 1, quantity * cost] 
     );
     const newInventoryID = invHeader.insertId;
 
     // 2. Update the main product stock
-    // Schema check: Table is tbl_product, column is product_stockQty
     await connection.query(
       "UPDATE tbl_product SET product_stockQty = product_stockQty + ? WHERE product_ID = ?",
       [quantity, product_id]
     );
 
     // 3. Log specifics in tbl_inventory_details
-    // Schema check: inventory_ID, product_ID, quantity, inventory_cost, inventory_subtotal
     await connection.query(
       `INSERT INTO tbl_inventory_details 
       (inventory_ID, product_ID, quantity, inventory_cost, inventory_subtotal) 
