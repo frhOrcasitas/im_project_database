@@ -1,7 +1,7 @@
 "use client";
 import { useState, useEffect } from "react";
 
-// ─── Helpers ─────────────────────────────────────────────────────────────────
+// ─── Helpers 
 const fmt = (n) =>
   Number(n || 0).toLocaleString("en-PH", { minimumFractionDigits: 2 });
 
@@ -40,7 +40,7 @@ function StatusBadge({ status }) {
   );
 }
 
-// ─── Balance Ring ─────────────────────────────────────────────────────────────
+// ─── Balance Ring
 function BalanceRing({ paid, total, size = 112 }) {
   const pct   = total > 0 ? Math.min((paid / total) * 100, 100) : 0;
   const r     = 38;
@@ -68,7 +68,7 @@ function BalanceRing({ paid, total, size = 112 }) {
   );
 }
 
-// ─── Toast ────────────────────────────────────────────────────────────────────
+// ─── Toast 
 function Toast({ message, type, onDone }) {
   useEffect(() => { const t = setTimeout(onDone, 3500); return () => clearTimeout(t); }, []);
   return (
@@ -79,9 +79,7 @@ function Toast({ message, type, onDone }) {
   );
 }
 
-// ══════════════════════════════════════════════════════════════════════════════
 // LEFT PANEL — Unpaid Sales List
-// ══════════════════════════════════════════════════════════════════════════════
 function SalesList({ selectedId, onSelect }) {
   const [sales, setSales]     = useState([]);
   const [loading, setLoading] = useState(true);
@@ -215,9 +213,7 @@ function SalesList({ selectedId, onSelect }) {
   );
 }
 
-// ══════════════════════════════════════════════════════════════════════════════
 // RIGHT PANEL — Sale Detail + Payment Form
-// ══════════════════════════════════════════════════════════════════════════════
 function PaymentPanel({ salesId, onPaymentSuccess }) {
   const [sale, setSale]         = useState(null);
   const [payments, setPayments] = useState([]);
@@ -257,13 +253,12 @@ function PaymentPanel({ salesId, onPaymentSuccess }) {
 
   useEffect(() => {
     // Fetch employees list for the dropdown
-    fetch("/api/employee") // Ensure this endpoint exists and returns [{employee_ID: 1, employee_name: 'John'}, ...]
+    fetch("/api/employee") 
       .then((r) => r.json())
       .then((data) => setEmployees(Array.isArray(data) ? data : []))
       .catch(() => console.error("Failed to load employees"));
 
     if (!salesId) return;
-    // ... your existing fetch for sales data
   }, [salesId]);
 
   const setField = (key, val) => setForm((f) => ({ ...f, [key]: val }));
@@ -312,7 +307,7 @@ function PaymentPanel({ salesId, onPaymentSuccess }) {
     }
   };
 
-  // ── Empty state ────────────────────────────────────────────────────────────
+  // ── Empty state 
   if (!salesId) {
     return (
       <div className="flex flex-col items-center justify-center h-full text-center gap-3">
@@ -344,7 +339,7 @@ function PaymentPanel({ salesId, onPaymentSuccess }) {
   return (
     <div className="flex flex-col h-full overflow-y-auto gap-5">
 
-      {/* ── Hero Card ───────────────────────────────────────────────────── */}
+      {/* ── Hero Card  */}
       <div className="bg-gradient-to-br from-slate-800 to-slate-900 rounded-2xl p-5 flex items-center gap-5 shrink-0">
         <BalanceRing paid={totalPaid} total={total} size={100} />
         <div className="flex-1 min-w-0">
@@ -368,7 +363,7 @@ function PaymentPanel({ salesId, onPaymentSuccess }) {
         </div>
       </div>
 
-      {/* ── Items Ordered ───────────────────────────────────────────────── */}
+      {/* ── Items Ordered  */}
       {items.length > 0 && (
         <div className="shrink-0">
           <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2">Items Ordered</p>
@@ -397,7 +392,7 @@ function PaymentPanel({ salesId, onPaymentSuccess }) {
         </div>
       )}
 
-      {/* ── Payment History ─────────────────────────────────────────────── */}
+      {/* ── Payment History  */}
       {payments.length > 0 && (
         <div className="shrink-0">
           <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2">
@@ -425,7 +420,6 @@ function PaymentPanel({ salesId, onPaymentSuccess }) {
                       {p.payment_ORNumber && (
                         <span className="ml-2 text-slate-500">OR #{p.payment_ORNumber}</span>
                       )}
-                      {/* This is the new line you are adding: */}
                       <div className="mt-1 text-slate-500 italic">
                         Processed by: {p.employee_name || `ID: ${p.employee_ID}`}
                       </div>
@@ -439,7 +433,7 @@ function PaymentPanel({ salesId, onPaymentSuccess }) {
         </div>
       )}
 
-      {/* ── Payment Form / Fully Paid ────────────────────────────────────── */}
+      {/* ── Payment Form / Fully Paid */}
       {balance > 0 ? (
         <form onSubmit={handleSubmit} className="flex flex-col gap-4 border-t border-slate-100 pt-5 shrink-0">
           <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Record New Payment</p>
@@ -559,9 +553,7 @@ function PaymentPanel({ salesId, onPaymentSuccess }) {
   );
 }
 
-// ══════════════════════════════════════════════════════════════════════════════
 // PAGE EXPORT
-// ══════════════════════════════════════════════════════════════════════════════
 export default function PaymentsPage() {
   const [selectedId, setSelectedId] = useState(null);
   const [toast, setToast]           = useState(null);
