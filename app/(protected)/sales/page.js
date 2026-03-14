@@ -80,7 +80,7 @@ export default function Sales() {
     fetchData();
   }, []);
 
-  // ─── Quantity helpers ──────────────────────────────────────────────────────
+  // ─── Quantity helpers 
   const getQty       = (pid) => quantities[pid]?.qty       ?? 1;
   const getRemainder = (pid) => quantities[pid]?.remainder ?? 0;
   const getUnitType  = (pid) => quantities[pid]?.unitType  ?? "Cases";
@@ -109,14 +109,14 @@ export default function Sales() {
       [pid]: { ...q[pid], price: parseFloat(val) || defaultPrice }
     }));
 
-  // ─── Stock deduction preview ───────────────────────────────────────────────
+  // ─── Stock deduction preview 
   function calcPiecesPreview(qty, unitType, remainder, pcsPerCase) {
     if (unitType === "Pieces") return qty;
     if (!pcsPerCase) return qty;
     return (qty * pcsPerCase) + (remainder || 0);
   }
 
-  // ─── Complete sale ─────────────────────────────────────────────────────────
+  // ─── Complete sale 
   const handleCompleteSale = async () => {
     if (!selectedCustomer) return alert("Please select a customer.");
     if (orderItems.length === 0) return alert("Order is empty.");
