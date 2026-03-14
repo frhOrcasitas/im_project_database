@@ -10,7 +10,6 @@ export async function GET() {
         cust.contactPerson         AS contact,
         COUNT(s.sales_ID)          AS invoices,
 
-        -- Use live sum from tbl_sales, NOT client_outstandingbalance
         SUM(s.sales_Balance)       AS totalDue,
 
         COALESCE(SUM(
