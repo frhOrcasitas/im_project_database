@@ -10,7 +10,7 @@ export async function PUT(request, { params }) {
       employee_name, employee_role, employee_email, employee_contactNo, 
       employee_address, employee_gender, employee_dateHired, 
       employee_status, employee_birthdate, isManager,
-      username, password_hash, system_role  // ← new
+      username, password_hash, system_role  
     } = body;
 
     const safeHired     = employee_dateHired  || null;
