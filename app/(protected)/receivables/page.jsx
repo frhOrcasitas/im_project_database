@@ -42,7 +42,7 @@ export default function Receivables() {
             setReceivables(data);
         } else {
             console.error("API Error Details:", data.details);
-            setReceivables([]); // Keep it an array so .filter() doesn't break
+            setReceivables([]); 
         }
       } catch (err) {
         console.error("Failed to fetch:", err);
