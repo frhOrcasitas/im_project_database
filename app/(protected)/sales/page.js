@@ -3,30 +3,37 @@
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 
+// Helper: parse pcs_per_case from unit string e.g. "3.8kgx4" → 4
+function parsePcsPerCase(unitStr) {
+  if (!unitStr) return null;
+  const match = unitStr.match(/x\s*(\d+)/i);
+  return match ? parseInt(match[1]) : null;
+}
+
 export default function Sales() {
   const router = useRouter();
 
-  const [products, setProducts] = useState([]);
+  const [products,  setProducts]  = useState([]);
   const [customers, setCustomers] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const [loading,   setLoading]   = useState(true);
 
   const [currentEmployee, setCurrentEmployee] = useState({ id: 1, name: "Markham Unionville" });
 
-  const [step, setStep] = useState(1);
-  const [selectedCustomer, setSelectedCustomer] = useState(null);
-  const [searchCustomer, setSearchCustomer] = useState("");
-  const [searchProduct, setSearchProduct] = useState("");
-  const [orderItems, setOrderItems] = useState([]);
+  const [step,               setStep]               = useState(1);
+  const [selectedCustomer,   setSelectedCustomer]   = useState(null);
+  const [searchCustomer,     setSearchCustomer]     = useState("");
+  const [searchProduct,      setSearchProduct]      = useState("");
+  const [orderItems,         setOrderItems]         = useState([]);
 
-  // quantities now stores { qty, price } per product_ID
+  // quantities stores { qty, price, unitType, remainder } per product_ID
   const [quantities, setQuantities] = useState({});
 
-  const [paymentType, setPaymentType] = useState("Cash");
-  const [paymentAmount, setPaymentAmount] = useState(0);
-  const [orderNotes, setOrderNotes] = useState("");
-  const [deliveryAddress, setDeliveryAddress] = useState("");
-  const [showCustomerDropdown, setShowCustomerDropdown] = useState(false);
-  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [paymentType,           setPaymentType]           = useState("Cash");
+  const [paymentAmount,         setPaymentAmount]         = useState(0);
+  const [orderNotes,            setOrderNotes]            = useState("");
+  const [deliveryAddress,       setDeliveryAddress]       = useState("");
+  const [showCustomerDropdown,  setShowCustomerDropdown]  = useState(false);
+  const [isSubmitting,          setIsSubmitting]          = useState(false);
 
   const [siNumber,  setSiNumber]  = useState("");
   const [drNumber,  setDrNumber]  = useState("");
@@ -37,6 +44,17 @@ export default function Sales() {
   const isStep3Complete = !!paymentType && paymentAmount >= 0;
 
   const DELIVERY_FEE = 0;
+
+  useEffect(() => {
+    fetch("/api/auth/me")
+      .then(r => r.json())
+      .then(d => {
+        if (d.user) {
+          setCurrentEmployee({ id: d.user.employee_ID, name: d.user.name });
+        }
+      })
+      .catch(() => {});
+  }, []);
 
   useEffect(() => {
     if (isStep1Complete && step === 1) setStep(2);
@@ -62,19 +80,43 @@ export default function Sales() {
     fetchData();
   }, []);
 
-  // Helper: get qty and price for a product card
-  const getQty   = (pid) => quantities[pid]?.qty   ?? 1;
-  const getPrice = (pid, defaultPrice) => quantities[pid]?.price ?? defaultPrice;
+  // ─── Quantity helpers ──────────────────────────────────────────────────────
+  const getQty       = (pid) => quantities[pid]?.qty       ?? 1;
+  const getRemainder = (pid) => quantities[pid]?.remainder ?? 0;
+  const getUnitType  = (pid) => quantities[pid]?.unitType  ?? "Cases";
+  const getPrice     = (pid, defaultPrice) => quantities[pid]?.price ?? defaultPrice;
 
   const setQty = (pid, val) =>
     setQuantities(q => ({ ...q, [pid]: { ...q[pid], qty: parseInt(val) || 1 } }));
 
+  const setRemainder = (pid, val) =>
+    setQuantities(q => ({ ...q, [pid]: { ...q[pid], remainder: parseInt(val) || 0 } }));
+
+  const setUnitType = (pid, val, product) => {
+    // Auto-fill price based on unit type
+    const defaultPrice = val === "Cases"
+      ? (product.product_pricePerCase || product.product_unitPrice)
+      : product.product_unitPrice;
+    setQuantities(q => ({
+      ...q,
+      [pid]: { ...q[pid], unitType: val, price: defaultPrice }
+    }));
+  };
+
   const setPrice = (pid, val, defaultPrice) =>
     setQuantities(q => ({
       ...q,
-      [pid]: { qty: q[pid]?.qty ?? 1, price: parseFloat(val) || defaultPrice }
+      [pid]: { ...q[pid], price: parseFloat(val) || defaultPrice }
     }));
 
+  // ─── Stock deduction preview ───────────────────────────────────────────────
+  function calcPiecesPreview(qty, unitType, remainder, pcsPerCase) {
+    if (unitType === "Pieces") return qty;
+    if (!pcsPerCase) return qty;
+    return (qty * pcsPerCase) + (remainder || 0);
+  }
+
+  // ─── Complete sale ─────────────────────────────────────────────────────────
   const handleCompleteSale = async () => {
     if (!selectedCustomer) return alert("Please select a customer.");
     if (orderItems.length === 0) return alert("Order is empty.");
@@ -92,6 +134,8 @@ export default function Sales() {
         productLine_ID: item.product_ID,
         quantity:       item.qty,
         unitPrice:      item.price,
+        unitType:       item.unitType,
+        remainder:      item.remainder || 0,
       })),
       payment: parseFloat(paymentAmount) > 0 ? {
         payment_amount: parseFloat(paymentAmount),
@@ -110,7 +154,6 @@ export default function Sales() {
       const result = await res.json();
       if (res.ok) {
         alert("Sale created successfully!");
-        // Reset
         setSelectedCustomer(null);
         setSearchCustomer("");
         setOrderItems([]);
@@ -156,33 +199,40 @@ export default function Sales() {
   };
 
   const handleAddToOrder = (product) => {
-    const qty   = getQty(product.product_ID);
-    const price = getPrice(product.product_ID, product.product_unitPrice);
+    const qty       = getQty(product.product_ID);
+    const price     = getPrice(product.product_ID, product.product_unitPrice);
+    const unitType  = getUnitType(product.product_ID);
+    const remainder = getRemainder(product.product_ID);
+    const pcsPerCase = parsePcsPerCase(product.product_unit);
+    const piecesNeeded = calcPiecesPreview(qty, unitType, remainder, pcsPerCase);
 
-    if (qty > product.product_stockQty) {
-      alert(`Insufficient stock! Only ${product.product_stockQty} remaining.`);
+    if (piecesNeeded > product.product_stockQty) {
+      alert(`Insufficient stock! Need ${piecesNeeded} pcs, only ${product.product_stockQty} available.`);
       return;
     }
 
-    const existing = orderItems.find((i) => i.product_ID === product.product_ID);
+    const existing = orderItems.find((i) => i.product_ID === product.product_ID && i.unitType === unitType);
     if (existing) {
       setOrderItems(orderItems.map((i) =>
-        i.product_ID === product.product_ID
-          ? { ...i, qty: i.qty + qty, price }
+        i.product_ID === product.product_ID && i.unitType === unitType
+          ? { ...i, qty, price, unitType, remainder }
           : i
       ));
     } else {
       setOrderItems([...orderItems, {
         product_ID: product.product_ID,
         name:       product.product_name,
+        unit:       product.product_unit,
         price,
         qty,
+        unitType,
+        remainder,
       }]);
     }
   };
 
-  const handleRemoveItem = (product_ID) => {
-    setOrderItems(orderItems.filter((i) => i.product_ID !== product_ID));
+  const handleRemoveItem = (product_ID, unitType) => {
+    setOrderItems(orderItems.filter((i) => !(i.product_ID === product_ID && i.unitType === unitType)));
   };
 
   const subtotal = orderItems.reduce((sum, item) => sum + item.price * item.qty, 0);
@@ -292,8 +342,6 @@ export default function Sales() {
               <textarea value={deliveryAddress} onChange={(e) => setDeliveryAddress(e.target.value)}
                 rows={2} className="w-full border border-gray-400 rounded px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 resize-none" />
             </div>
-
-            {/* Receipt Numbers */}
             <div className="grid grid-cols-3 gap-3 mt-4 pt-4 border-t border-gray-100">
               <div>
                 <label className="block text-sm font-bold text-gray-800 mb-1">SI Number</label>
@@ -332,6 +380,11 @@ export default function Sales() {
                 const lowStock   = !outOfStock && product.product_stockQty <= (product.product_reorderPoint || 5);
                 const cardPrice  = getPrice(pid, product.product_unitPrice);
                 const cardQty    = getQty(pid);
+                const cardUnit   = getUnitType(pid);
+                const cardRem    = getRemainder(pid);
+                const pcsPerCase = parsePcsPerCase(product.product_unit);
+                const piecesPreview = calcPiecesPreview(cardQty, cardUnit, cardRem, pcsPerCase);
+                const hasCasePrice  = !!product.product_pricePerCase;
 
                 return (
                   <div key={pid}
@@ -341,18 +394,43 @@ export default function Sales() {
                       : "border-green-200 bg-green-50"
                     }`}>
 
-                    <p className="text-sm font-bold text-gray-900 mb-2">{product.product_name}</p>
+                    <p className="text-sm font-bold text-gray-900 mb-1">{product.product_name}</p>
+                    {product.product_unit && (
+                      <p className="text-[10px] text-gray-400 mb-2 font-medium">{product.product_unit}</p>
+                    )}
 
-                    {/* Editable unit price */}
+                    {/* Unit Type Toggle */}
+                    <div className="flex gap-1 mb-2 bg-white rounded border border-gray-200 p-0.5">
+                      {["Cases", "Pieces"].map(type => (
+                        <button
+                          key={type}
+                          type="button"
+                          disabled={outOfStock}
+                          onClick={(e) => { e.stopPropagation(); setUnitType(pid, type, product); }}
+                          className={`flex-1 text-[10px] font-bold py-1 rounded transition-colors ${
+                            cardUnit === type
+                              ? "bg-blue-600 text-white"
+                              : "text-gray-500 hover:bg-gray-100"
+                          }`}
+                        >
+                          {type}
+                        </button>
+                      ))}
+                    </div>
+
+                    {/* Price display */}
                     <div className="mb-2">
                       <label className="text-[10px] uppercase font-bold text-gray-500 block mb-0.5">
-                        Unit Price (editable)
+                        {cardUnit === "Cases" ? "Case Price" : "Unit Price"} (editable)
+                        {cardUnit === "Cases" && !hasCasePrice && (
+                          <span className="ml-1 text-amber-500 normal-case font-normal">no case price set</span>
+                        )}
                       </label>
                       <div className="relative">
                         <span className="absolute left-2 top-1.5 text-blue-700 font-bold text-sm">₱</span>
                         <input
                           type="number"
-                          step="0.01"
+                          step="1"
                           value={cardPrice}
                           onChange={(e) => setPrice(pid, e.target.value, product.product_unitPrice)}
                           onClick={(e) => e.stopPropagation()}
@@ -360,37 +438,67 @@ export default function Sales() {
                           disabled={outOfStock}
                         />
                       </div>
+                      {hasCasePrice && (
+                        <div className="text-[10px] text-gray-400 mt-0.5">
+                          Default: ₱{Number(cardUnit === "Cases" ? product.product_pricePerCase : product.product_unitPrice).toLocaleString()}
+                        </div>
+                      )}
                     </div>
 
-                    {/* Stock remaining */}
+                    {/* Stock info */}
                     <div className="flex items-center gap-1.5 mb-2">
                       <span className="text-xs text-gray-500">Stock:</span>
                       <span className={`text-xs font-bold ${outOfStock ? "text-red-600" : lowStock ? "text-amber-600" : "text-green-700"}`}>
-                        {product.product_stockQty} {product.product_unit || ""}
+                        {product.product_stockQty} pcs
+                        {pcsPerCase && ` (≈${Math.floor(product.product_stockQty / pcsPerCase)} cases)`}
                       </span>
                       {outOfStock && <span className="text-[10px] font-bold bg-red-100 text-red-700 px-1.5 py-0.5 rounded-full">Out</span>}
                       {lowStock   && <span className="text-[10px] font-bold bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded-full">Low</span>}
                     </div>
 
-                    {/* Quantity + Add button */}
-                    <div>
-                      <input
-                        type="number"
-                        min={1}
-                        max={product.product_stockQty || undefined}
-                        value={cardQty}
-                        onChange={(e) => { e.stopPropagation(); setQty(pid, e.target.value); }}
-                        onClick={(e) => e.stopPropagation()}
-                        className="w-full border border-gray-400 rounded px-2 py-1 text-sm font-bold mb-2"
-                        disabled={outOfStock}
-                      />
-                      <button
-                        onClick={(e) => { e.stopPropagation(); handleAddToOrder(product); }}
-                        disabled={outOfStock}
-                        className="w-full bg-green-700 text-white text-xs font-bold py-2 rounded hover:bg-green-800 uppercase tracking-wider disabled:opacity-40 disabled:cursor-not-allowed">
-                        {outOfStock ? "Out of Stock" : "Add to Order"}
-                      </button>
+                    {/* Qty + Remainder */}
+                    <div className="flex gap-1 mb-1">
+                      <div className="flex-1">
+                        <label className="text-[10px] text-gray-500 font-bold uppercase block mb-0.5">
+                          {cardUnit === "Cases" ? "Cases" : "Pieces"}
+                        </label>
+                        <input
+                          type="number" min={1}
+                          value={cardQty}
+                          onChange={(e) => { e.stopPropagation(); setQty(pid, e.target.value); }}
+                          onClick={(e) => e.stopPropagation()}
+                          className="w-full border border-gray-400 rounded px-2 py-1 text-sm font-bold"
+                          disabled={outOfStock}
+                        />
+                      </div>
+                      {cardUnit === "Cases" && (
+                        <div className="w-16">
+                          <label className="text-[10px] text-gray-500 font-bold uppercase block mb-0.5">+Pcs</label>
+                          <input
+                            type="number" min={0}
+                            value={cardRem}
+                            onChange={(e) => { e.stopPropagation(); setRemainder(pid, e.target.value); }}
+                            onClick={(e) => e.stopPropagation()}
+                            className="w-full border border-gray-300 rounded px-2 py-1 text-sm text-gray-600"
+                            disabled={outOfStock}
+                          />
+                        </div>
+                      )}
                     </div>
+
+                    {/* Pieces preview */}
+                    {pcsPerCase && !outOfStock && (
+                      <p className="text-[10px] text-gray-400 mb-2">
+                        = {piecesPreview} pcs will be deducted
+                      </p>
+                    )}
+
+                    <button
+                      onClick={(e) => { e.stopPropagation(); handleAddToOrder(product); }}
+                      disabled={outOfStock}
+                      className="w-full bg-green-700 text-white text-xs font-bold py-2 rounded hover:bg-green-800 uppercase tracking-wider disabled:opacity-40 disabled:cursor-not-allowed">
+                      {outOfStock ? "Out of Stock" : "Add to Order"}
+                    </button>
                   </div>
                 );
               })}
@@ -432,17 +540,28 @@ export default function Sales() {
             </div>
 
             <div className="max-h-60 overflow-y-auto mb-4 space-y-3">
-              {orderItems.map((item) => (
-                <div key={`summary-${item.product_ID}`}
-                  className="flex justify-between items-start border-b border-gray-100 pb-2">
-                  <div className="text-sm">
-                    <p className="font-bold text-gray-900">{item.name}</p>
-                    <p className="text-gray-700 font-medium">{item.qty} × {formatCurrency(item.price)}</p>
+              {orderItems.map((item) => {
+                const pcsPerCase = parsePcsPerCase(item.unit);
+                const pieces = calcPiecesPreview(item.qty, item.unitType, item.remainder, pcsPerCase);
+                return (
+                  <div key={`summary-${item.product_ID}-${item.unitType}`}
+                    className="flex justify-between items-start border-b border-gray-100 pb-2">
+                    <div className="text-sm flex-1 min-w-0 pr-2">
+                      <p className="font-bold text-gray-900 truncate">{item.name}</p>
+                      <p className="text-gray-700 font-medium">
+                        {item.qty} {item.unitType}
+                        {item.unitType === "Cases" && item.remainder > 0 && ` + ${item.remainder} pcs`}
+                        {" × "}{formatCurrency(item.price)}
+                      </p>
+                      {pcsPerCase && (
+                        <p className="text-[10px] text-gray-400">{pieces} pcs deducted</p>
+                      )}
+                    </div>
+                    <button onClick={() => handleRemoveItem(item.product_ID, item.unitType)}
+                        className="text-red-600 font-bold text-xs hover:underline shrink-0">Remove</button>
                   </div>
-                  <button onClick={() => handleRemoveItem(item.product_ID)}
-                    className="text-red-600 font-bold text-xs hover:underline">Remove</button>
-                </div>
-              ))}
+                );
+              })}
               {orderItems.length === 0 && (
                 <p className="text-xs text-gray-400 italic text-center py-4">No items added yet.</p>
               )}

@@ -2,12 +2,25 @@ import pool from "../../lib/db";
 
 // GET - All Products
 export async function GET() {
-    try {
-        const [rows] = await pool.query("SELECT * FROM tbl_product ORDER BY product_name ASC");
-        return Response.json(rows);
-    } catch (error) {
-        return Response.json({ error: error.message }, { status: 500 });
-    }
+  try {
+    const [rows] = await pool.query(`
+      SELECT 
+        product_ID,
+        product_name,
+        product_stockQty,
+        product_unitOfMeasure AS product_unit,
+        product_reorderLevel  AS product_reorderPoint,
+        product_unitPrice,
+        product_pricePerCase,
+        product_plantPrice,
+        product_description
+      FROM tbl_product 
+      ORDER BY product_name ASC
+    `);
+    return Response.json(rows);
+  } catch (error) {
+    return Response.json({ error: error.message }, { status: 500 });
+  }
 }
 
 // POST - New Product

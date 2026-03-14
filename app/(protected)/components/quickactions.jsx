@@ -1,6 +1,12 @@
 "use client";
 import { useState, useEffect, useRef } from "react";
 
+function parsePcsPerCase(unitStr) {
+  if (!unitStr) return null;
+  const match = unitStr.match(/x\s*(\d+)/i);
+  return match ? parseInt(match[1]) : null;
+}
+
 // ─── Reusable Modal Shell ───────────────────────────────────────────────────
 function Modal({ open, onClose, title, children }) {
   const overlayRef = useRef(null);
@@ -72,61 +78,89 @@ function Toast({ message, type, onDone }) {
   );
 }
 
+function SaleField({ label, required, children }) {
+  return (
+    <div className="flex flex-col gap-1">
+      <label className="text-xs font-semibold text-slate-500 uppercase tracking-wide">
+        {label} {required && <span className="text-red-400">*</span>}
+      </label>
+      {children}
+    </div>
+  );
+}
+
+const _inputCls  = "w-full border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition";
+const _selectCls = _inputCls + " bg-white";
+
 // ══════════════════════════════════════════════════════════════════════════════
 // MODAL 1 — NEW SALE
 // ══════════════════════════════════════════════════════════════════════════════
-function NewSaleModal({ open, onClose, onSuccess }) {
-  const [clients, setClients] = useState([]);
-  const [products, setProducts] = useState([]);
-  const [loading, setLoading] = useState(false);
-
-  const emptyItem = { productLine_ID: "", quantity: 1, unitPrice: "" };
+function NewSaleModal({ open, onClose, onSuccess, clients = [], products = [] }) {
+  const emptyItem = { productLine_ID: "", quantity: 1, unitPrice: "", unitType: "Cases", remainder: 0 };
+ 
   const [form, setForm] = useState({
-    client_ID: "",
-    employee_ID: "",
-    sales_notes: "",
-    sales_SINumber: "",
-    sales_DRNumber: "",
-    sales_SWSNumber: "",
+    client_ID: "", employee_ID: "", sales_notes: "",
+    sales_SINumber: "", sales_DRNumber: "", sales_SWSNumber: "",
     items: [{ ...emptyItem }],
     payment: { payment_type: "Cash", payment_amount: "", employee_ID: "" },
   });
-
+  const [loading,   setLoading]   = useState(false);
+  const [error,     setError]     = useState("");
+  const [employees, setEmployees] = useState([]);
+ 
+  // ← ALL hooks must be before any early return
   useEffect(() => {
     if (!open) return;
-    fetch("/api/client").then((r) => r.json()).then(setClients).catch(() => {});
-    fetch("/api/products").then((r) => r.json()).then(setProducts).catch(() => {});
+    fetch("/api/employee")
+      .then(r => r.json())
+      .then(d => setEmployees(
+        Array.isArray(d) ? d.filter(e => e.employee_status === "Active" && e.employee_ID !== 0) : []
+      ))
+      .catch(() => setEmployees([]));
   }, [open]);
-
-  const setField = (key, val) => setForm((f) => ({ ...f, [key]: val }));
-
+ 
+  // ← Early return AFTER all hooks
+  if (!open) return null;
+ 
+  const setField = (key, val) => setForm(f => ({ ...f, [key]: val }));
+ 
   const setItem = (i, key, val) => {
     const items = [...form.items];
     items[i] = { ...items[i], [key]: val };
-
-    // Auto-fill unit price from product when product is selected
-    if (key === "productLine_ID") {
-      const product = products.find((p) => String(p.product_ID) === String(val));
-      if (product) items[i].unitPrice = product.product_unitPrice ?? "";
+    if (key === "productLine_ID" || key === "unitType") {
+      const prodId   = key === "productLine_ID" ? val : items[i].productLine_ID;
+      const unitType = key === "unitType"        ? val : items[i].unitType;
+      const product  = products.find(p => String(p.product_ID) === String(prodId));
+      if (product) {
+        items[i].unitPrice = unitType === "Cases"
+          ? (product.product_pricePerCase || product.product_unitPrice || "")
+          : (product.product_unitPrice || "");
+      }
     }
-    setForm((f) => ({ ...f, items }));
+    setForm(f => ({ ...f, items }));
   };
-
-  const addItem = () => setForm((f) => ({ ...f, items: [...f.items, { ...emptyItem }] }));
-  const removeItem = (i) =>
-    setForm((f) => ({ ...f, items: f.items.filter((_, idx) => idx !== i) }));
-
+ 
+  const addItem    = () => setForm(f => ({ ...f, items: [...f.items, { ...emptyItem }] }));
+  const removeItem = (i) => setForm(f => ({ ...f, items: f.items.filter((_, idx) => idx !== i) }));
+ 
   const total = form.items.reduce(
-    (sum, it) => sum + (parseFloat(it.quantity) || 0) * (parseFloat(it.unitPrice) || 0),
-    0
+    (sum, it) => sum + (parseFloat(it.quantity) || 0) * (parseFloat(it.unitPrice) || 0), 0
   );
-
+ 
   const handleSubmit = async (e) => {
     e.preventDefault();
     setLoading(true);
+    setError("");
     try {
       const payload = {
         ...form,
+        items: form.items.map(it => ({
+          productLine_ID: it.productLine_ID,
+          quantity:       it.quantity,
+          unitPrice:      it.unitPrice,
+          unitType:       it.unitType,
+          remainder:      it.remainder || 0,
+        })),
         payment: form.payment.payment_amount
           ? { ...form.payment, employee_ID: form.employee_ID }
           : null,
@@ -138,161 +172,226 @@ function NewSaleModal({ open, onClose, onSuccess }) {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error);
-      onSuccess(`Sale #${data.sales_ID} created successfully!`);
+      onSuccess(`Sale #${data.sales_ID || data.saleId} created successfully!`);
       onClose();
     } catch (err) {
-      onSuccess(err.message, "error");
+      setError(err.message);
     } finally {
       setLoading(false);
     }
   };
-
-  const resetForm = () =>
-    setForm({
-      client_ID: "", employee_ID: "", sales_notes: "",
-      sales_SINumber: "", sales_DRNumber: "", sales_SWSNumber: "",
-      items: [{ ...emptyItem }],
-      payment: { payment_type: "Cash", payment_amount: "", employee_ID: "" },
-    });
-
+ 
   return (
-    <Modal open={open} onClose={() => { resetForm(); onClose(); }} title="+ New Sale">
-      <form onSubmit={handleSubmit} className="flex flex-col gap-4">
-
-        {/* Client & Employee */}
-        <div className="grid grid-cols-2 gap-3">
-          <Field label="Client" required>
-            <select className={selectCls} value={form.client_ID} onChange={(e) => setField("client_ID", e.target.value)} required>
-              <option value="">Select client...</option>
-              {clients.map((c) => (
-                <option key={c.client_ID} value={c.client_ID}>{c.client_name}</option>
-              ))}
-            </select>
-          </Field>
-          <Field label="Employee ID" required>
-            <input className={inputCls} type="number" placeholder="e.g. 3" value={form.employee_ID}
-              onChange={(e) => setField("employee_ID", e.target.value)} required />
-          </Field>
+    <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+      <div className="bg-white rounded-2xl w-full max-w-2xl shadow-xl max-h-[90vh] flex flex-col overflow-hidden">
+        <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between shrink-0">
+          <h2 className="text-lg font-bold text-slate-800">+ New Sale / Order</h2>
+          <button onClick={onClose} className="text-slate-400 hover:text-slate-600 w-8 h-8 flex items-center justify-center rounded-lg hover:bg-slate-100">✕</button>
         </div>
-
-        {/* Receipt Numbers */}
-        <div className="grid grid-cols-3 gap-3">
-          <Field label="SI Number">
-            <input className={inputCls} type="number" placeholder="SI #" value={form.sales_SINumber}
-              onChange={(e) => setField("sales_SINumber", e.target.value)} />
-          </Field>
-          <Field label="DR Number">
-            <input className={inputCls} type="number" placeholder="DR #" value={form.sales_DRNumber}
-              onChange={(e) => setField("sales_DRNumber", e.target.value)} />
-          </Field>
-          <Field label="SWS Number">
-            <input className={inputCls} type="number" placeholder="SWS #" value={form.sales_SWSNumber}
-              onChange={(e) => setField("sales_SWSNumber", e.target.value)} />
-          </Field>
-        </div>
-
-        {/* Line Items */}
-        <div>
-          <div className="flex items-center justify-between mb-2">
-            <span className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Items <span className="text-red-400">*</span></span>
-            <button type="button" onClick={addItem}
-              className="text-xs text-blue-600 hover:text-blue-800 font-medium">+ Add Item</button>
-          </div>
-          <div className="flex flex-col gap-2">
-            {form.items.map((item, i) => (
-              <div key={i} className="grid grid-cols-12 gap-2 items-center bg-slate-50 rounded-lg p-2">
-                <div className="col-span-5">
-                  <select className={selectCls} value={item.productLine_ID}
-                    onChange={(e) => setItem(i, "productLine_ID", e.target.value)} required>
-                    <option value="">Product...</option>
-                    {products.map((p) => (
-                      <option key={p.product_ID} value={p.product_ID}>
-                        {p.product_name}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                <div className="col-span-2">
-                  <input className={inputCls} type="number" min="1" placeholder="Qty"
-                    value={item.quantity} onChange={(e) => setItem(i, "quantity", e.target.value)} required />
-                </div>
-                <div className="col-span-3">
-                  <input className={inputCls} type="number" step="0.01" placeholder="Unit Price"
-                    value={item.unitPrice} onChange={(e) => setItem(i, "unitPrice", e.target.value)} required />
-                </div>
-                <div className="col-span-1 text-xs text-slate-500 text-right">
-                  ₱{((parseFloat(item.quantity) || 0) * (parseFloat(item.unitPrice) || 0)).toLocaleString()}
-                </div>
-                <div className="col-span-1 flex justify-end">
-                  {form.items.length > 1 && (
-                    <button type="button" onClick={() => removeItem(i)}
-                      className="text-red-400 hover:text-red-600 text-sm font-bold">✕</button>
-                  )}
-                </div>
+ 
+        <div className="overflow-y-auto flex-1 px-6 py-5">
+          <form onSubmit={handleSubmit} className="flex flex-col gap-4">
+ 
+            {/* Client & Employee */}
+            <div className="grid grid-cols-2 gap-3">
+              <SaleField label="Client" required>
+                <select className={_selectCls} value={form.client_ID}
+                  onChange={e => setField("client_ID", e.target.value)} required>
+                  <option value="">Select client...</option>
+                  {clients.map(c => <option key={c.client_ID} value={c.client_ID}>{c.client_name}</option>)}
+                </select>
+              </SaleField>
+              <SaleField label="Employee" required>
+                <select className={_selectCls} value={form.employee_ID}
+                  onChange={e => setField("employee_ID", e.target.value)} required>
+                  <option value="">Select employee...</option>
+                  {employees.map(e => (
+                    <option key={e.employee_ID} value={e.employee_ID}>{e.employee_name}</option>
+                  ))}
+                </select>
+              </SaleField>
+            </div>
+ 
+            {/* Receipt Numbers */}
+            <div className="grid grid-cols-3 gap-3">
+              <SaleField label="SI Number">
+                <input className={_inputCls} type="number" placeholder="SI #"
+                  value={form.sales_SINumber} onChange={e => setField("sales_SINumber", e.target.value)} />
+              </SaleField>
+              <SaleField label="DR Number">
+                <input className={_inputCls} type="number" placeholder="DR #"
+                  value={form.sales_DRNumber} onChange={e => setField("sales_DRNumber", e.target.value)} />
+              </SaleField>
+              <SaleField label="SWS Number">
+                <input className={_inputCls} type="number" placeholder="SWS #"
+                  value={form.sales_SWSNumber} onChange={e => setField("sales_SWSNumber", e.target.value)} />
+              </SaleField>
+            </div>
+ 
+            {/* Line Items */}
+            <div>
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-xs font-semibold text-slate-500 uppercase tracking-wide">
+                  Items <span className="text-red-400">*</span>
+                </span>
+                <button type="button" onClick={addItem} className="text-xs text-blue-600 hover:text-blue-800 font-medium">
+                  + Add Item
+                </button>
               </div>
-            ))}
-          </div>
-        </div>
-
-        {/* Total */}
-        <div className="flex justify-between items-center bg-blue-50 rounded-lg px-4 py-2">
-          <span className="text-sm font-semibold text-slate-700">Total Amount</span>
-          <span className="text-lg font-bold text-blue-700">₱{total.toLocaleString("en-PH", { minimumFractionDigits: 2 })}</span>
-        </div>
-
-        {/* Payment (optional) */}
-        <div className="border border-slate-100 rounded-xl p-3 flex flex-col gap-3">
-          <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Initial Payment <span className="text-slate-400 font-normal normal-case">(optional — leave blank to mark Unpaid)</span></p>
-          <div className="grid grid-cols-2 gap-3">
-            <Field label="Payment Type">
-              <select className={selectCls} value={form.payment.payment_type}
-                onChange={(e) => setForm((f) => ({ ...f, payment: { ...f.payment, payment_type: e.target.value } }))}>
-                <option>Cash</option>
-                <option>Check</option>
-                <option>Bank Transfer</option>
-              </select>
-            </Field>
-            <Field label="Amount Paid">
-              <input className={inputCls} type="number" step="0.01" placeholder={`Max ₱${total.toLocaleString()}`}
-                value={form.payment.payment_amount}
-                onChange={(e) => setForm((f) => ({ ...f, payment: { ...f.payment, payment_amount: e.target.value } }))} />
-            </Field>
-          </div>
-          {form.payment.payment_amount && (
-            <div className="text-xs text-slate-500">
-              Balance after payment:{" "}
-              <span className="font-semibold text-red-600">
-                ₱{Math.max(0, total - parseFloat(form.payment.payment_amount || 0)).toLocaleString("en-PH", { minimumFractionDigits: 2 })}
+              <div className="flex flex-col gap-2">
+                {form.items.map((item, i) => {
+                  const selProd    = products.find(p => String(p.product_ID) === String(item.productLine_ID));
+                  const pcsPerCase = parsePcsPerCase(selProd?.product_unit);
+                  const pieces     = item.unitType === "Cases" && pcsPerCase
+                    ? (parseInt(item.quantity) || 0) * pcsPerCase + (parseInt(item.remainder) || 0)
+                    : (parseInt(item.quantity) || 0);
+ 
+                  return (
+                    <div key={i} className="bg-slate-50 rounded-lg p-3 flex flex-col gap-2">
+                      <div className="grid grid-cols-12 gap-2 items-start">
+ 
+                        {/* Product */}
+                        <div className="col-span-5">
+                          <select className={_selectCls} value={item.productLine_ID}
+                            onChange={e => setItem(i, "productLine_ID", e.target.value)} required>
+                            <option value="">Product...</option>
+                            {products.map(p => (
+                              <option key={p.product_ID} value={p.product_ID} disabled={p.product_stockQty <= 0}>
+                                {p.product_name} {p.product_stockQty <= 0 ? "(Out)" : `(${p.product_stockQty})`}
+                              </option>
+                            ))}
+                          </select>
+                          {selProd?.product_unit && (
+                            <p className="text-[10px] text-slate-400 mt-0.5">{selProd.product_unit}</p>
+                          )}
+                        </div>
+ 
+                        {/* Unit type + Qty + Remainder */}
+                        <div className="col-span-2">
+                          <div className="flex gap-0.5 bg-white rounded border border-slate-200 p-0.5">
+                            {["Cases", "Pieces"].map(type => (
+                              <button key={type} type="button"
+                                onClick={() => setItem(i, "unitType", type)}
+                                className={`flex-1 text-[9px] font-bold py-1 rounded transition-colors ${
+                                  item.unitType === type ? "bg-blue-600 text-white" : "text-slate-500 hover:bg-slate-100"
+                                }`}>
+                                {type === "Cases" ? "Case" : "Pcs"}
+                              </button>
+                            ))}
+                          </div>
+                          <input className={_inputCls + " mt-1"} type="number" min="1" placeholder="Qty"
+                            value={item.quantity} onChange={e => setItem(i, "quantity", e.target.value)} required />
+                          {item.unitType === "Cases" && (
+                            <input className={_inputCls + " mt-1"} type="number" min="0" placeholder="+Pcs rem."
+                              value={item.remainder} onChange={e => setItem(i, "remainder", e.target.value)} />
+                          )}
+                          {pcsPerCase && (
+                            <p className="text-[9px] text-slate-400 mt-0.5">{pieces} pcs</p>
+                          )}
+                        </div>
+ 
+                        {/* Unit Price */}
+                        <div className="col-span-3">
+                          <input className={_inputCls} type="number" step="0.01" placeholder="Unit Price"
+                            value={item.unitPrice} onChange={e => setItem(i, "unitPrice", e.target.value)} required />
+                          {selProd && (
+                            <p className="text-[9px] text-slate-400 mt-0.5">
+                              Pcs: ₱{Number(selProd.product_unitPrice || 0).toLocaleString()}
+                              {selProd.product_pricePerCase && ` · Case: ₱${Number(selProd.product_pricePerCase).toLocaleString()}`}
+                            </p>
+                          )}
+                        </div>
+ 
+                        {/* Subtotal */}
+                        <div className="col-span-1 text-xs text-slate-500 text-right font-semibold pt-2">
+                          ₱{((parseFloat(item.quantity) || 0) * (parseFloat(item.unitPrice) || 0)).toLocaleString()}
+                        </div>
+ 
+                        {/* Remove */}
+                        <div className="col-span-1 flex justify-end pt-1">
+                          {form.items.length > 1 && (
+                            <button type="button" onClick={() => removeItem(i)}
+                              className="text-red-400 hover:text-red-600 text-sm font-bold">✕</button>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+ 
+            {/* Total */}
+            <div className="flex justify-between items-center bg-blue-50 rounded-lg px-4 py-2">
+              <span className="text-sm font-semibold text-slate-700">Total Amount</span>
+              <span className="text-lg font-bold text-blue-700">
+                ₱{total.toLocaleString("en-PH", { minimumFractionDigits: 2 })}
               </span>
             </div>
-          )}
+ 
+            {/* Payment */}
+            <div className="border border-slate-100 rounded-xl p-3 flex flex-col gap-3">
+              <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide">
+                Initial Payment{" "}
+                <span className="text-slate-400 font-normal normal-case">(optional — leave blank to mark Unpaid)</span>
+              </p>
+              <div className="grid grid-cols-2 gap-3">
+                <SaleField label="Payment Type">
+                  <select className={_selectCls} value={form.payment.payment_type}
+                    onChange={e => setForm(f => ({ ...f, payment: { ...f.payment, payment_type: e.target.value } }))}>
+                    <option>Cash</option>
+                    <option>Check</option>
+                    <option>Bank Transfer</option>
+                    <option>GCash</option>
+                  </select>
+                </SaleField>
+                <SaleField label="Amount Paid">
+                  <input className={_inputCls} type="number" step="0.01"
+                    placeholder={`Max ₱${total.toLocaleString()}`}
+                    value={form.payment.payment_amount}
+                    onChange={e => setForm(f => ({ ...f, payment: { ...f.payment, payment_amount: e.target.value } }))} />
+                </SaleField>
+              </div>
+              {form.payment.payment_amount && (
+                <div className="text-xs text-slate-500">
+                  Balance after payment:{" "}
+                  <span className="font-semibold text-red-600">
+                    ₱{Math.max(0, total - parseFloat(form.payment.payment_amount || 0))
+                      .toLocaleString("en-PH", { minimumFractionDigits: 2 })}
+                  </span>
+                </div>
+              )}
+            </div>
+ 
+            {/* Notes */}
+            <SaleField label="Notes">
+              <textarea className={_inputCls + " resize-none"} rows={2}
+                placeholder="Optional delivery or order notes..."
+                value={form.sales_notes} onChange={e => setField("sales_notes", e.target.value)} />
+            </SaleField>
+ 
+            {error && (
+              <div className="bg-red-50 border border-red-200 text-red-700 rounded-lg px-4 py-3 text-sm">{error}</div>
+            )}
+ 
+            <div className="flex gap-3 pt-1">
+              <button type="button" onClick={onClose}
+                className="flex-1 border border-slate-200 text-slate-600 font-medium py-2 rounded-lg text-sm hover:bg-slate-50">
+                Cancel
+              </button>
+              <button type="submit" disabled={loading}
+                className="flex-1 bg-green-600 hover:bg-green-700 disabled:opacity-50 text-white font-medium py-2 rounded-lg text-sm">
+                {loading ? "Saving..." : "✓ Create Sale"}
+              </button>
+            </div>
+          </form>
         </div>
-
-        {/* Notes */}
-        <Field label="Notes">
-          <textarea className={inputCls + " resize-none"} rows={2} placeholder="Optional delivery or order notes..."
-            value={form.sales_notes} onChange={(e) => setField("sales_notes", e.target.value)} />
-        </Field>
-
-        {/* Actions */}
-        <div className="flex gap-3 pt-1">
-          <button type="button" onClick={() => { resetForm(); onClose(); }}
-            className="flex-1 border border-slate-200 text-slate-600 font-medium py-2 rounded-lg text-sm hover:bg-slate-50 transition-colors">
-            Cancel
-          </button>
-          <button type="submit" disabled={loading}
-            className="flex-1 bg-green-600 hover:bg-green-700 disabled:opacity-50 text-white font-medium py-2 rounded-lg text-sm transition-colors">
-            {loading ? "Saving..." : "Create Sale"}
-          </button>
-        </div>
-      </form>
-    </Modal>
+      </div>
+    </div>
   );
 }
 
-// ══════════════════════════════════════════════════════════════════════════════
 // MODAL 2 — CHECK INVENTORY
-// ══════════════════════════════════════════════════════════════════════════════
 function CheckInventoryModal({ open, onClose }) {
   const [inventory, setInventory] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -379,9 +478,7 @@ function CheckInventoryModal({ open, onClose }) {
   );
 }
 
-// ══════════════════════════════════════════════════════════════════════════════
 // MODAL 3 — ADD CUSTOMER
-// ══════════════════════════════════════════════════════════════════════════════
 function AddCustomerModal({ open, onClose, onSuccess }) {
   const [loading, setLoading] = useState(false);
   const [form, setForm] = useState({
@@ -463,141 +560,31 @@ function AddCustomerModal({ open, onClose, onSuccess }) {
 }
 
 // ══════════════════════════════════════════════════════════════════════════════
-// MODAL 4 — GENERATE REPORT
-// ══════════════════════════════════════════════════════════════════════════════
-function GenerateReportModal({ open, onClose }) {
-  const today = new Date().toISOString().split("T")[0];
-  const [reportType, setReportType] = useState("daily");
-  const [date, setDate] = useState(today);
-  const [month, setMonth] = useState(today.slice(0, 7));
-  const [loading, setLoading] = useState(false);
-  const [result, setResult] = useState(null);
-  const [error, setError] = useState("");
-
-  const reportOptions = [
-    { value: "daily", label: "📅 Daily Sales", desc: "Sales, collections & balances for a specific day" },
-    { value: "monthly", label: "📆 Monthly Summary", desc: "Month-over-month totals" },
-    { value: "revenue", label: "💰 Revenue Report", desc: "Overall revenue breakdown" },
-    { value: "top-products", label: "🏆 Top Products", desc: "Best selling products by volume" },
-    { value: "receivables", label: "💵 Receivables", desc: "All unpaid & partial sales" },
-  ];
-
-  const fetchReport = async () => {
-    setLoading(true);
-    setResult(null);
-    setError("");
-    try {
-      let url = "";
-      if (reportType === "daily") url = `/api/reports/daily?date=${date}`;
-      else if (reportType === "monthly") url = `/api/reports/monthly?month=${month}`;
-      else if (reportType === "revenue") url = `/api/reports/revenue`;
-      else if (reportType === "top-products") url = `/api/reports/top-products`;
-      else if (reportType === "receivables") url = `/api/receivables`;
-
-      const res = await fetch(url);
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error);
-      setResult(data);
-    } catch (err) {
-      setError(err.message);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const fmt = (n) =>
-    Number(n).toLocaleString("en-PH", { minimumFractionDigits: 2 });
-
-  const renderResult = () => {
-    if (!result) return null;
-
-    // Daily report
-    if (reportType === "daily" && result.sale_date) {
-      return (
-        <div className="grid grid-cols-2 gap-3 mt-4">
-          {[
-            { label: "Total Sales", val: `₱${fmt(result.total_sales || 0)}`, color: "text-green-600" },
-            { label: "Transactions", val: result.total_transactions || 0, color: "text-blue-600" },
-            { label: "Collected", val: `₱${fmt(result.total_collected || 0)}`, color: "text-blue-600" },
-            { label: "Outstanding", val: `₱${fmt(result.total_outstanding || 0)}`, color: "text-red-600" },
-            { label: "Unpaid Sales", val: result.unpaid_count || 0, color: "text-red-600" },
-            { label: "Partial Sales", val: result.partial_count || 0, color: "text-amber-600" },
-          ].map((s) => (
-            <div key={s.label} className="bg-slate-50 rounded-xl p-3">
-              <div className={`text-xl font-bold ${s.color}`}>{s.val}</div>
-              <div className="text-xs text-slate-500 mt-0.5">{s.label}</div>
-            </div>
-          ))}
-        </div>
-      );
-    }
-
-    // Receivables list
-    if (reportType === "receivables" && Array.isArray(result)) {
-      return (
-        <div className="mt-4 border border-slate-100 rounded-xl overflow-hidden">
-          <table className="w-full text-sm">
-            <thead className="bg-slate-50">
-              <tr>
-                <th className="text-left px-3 py-2 text-xs text-slate-500 font-semibold">Client</th>
-                <th className="text-right px-3 py-2 text-xs text-slate-500 font-semibold">Balance</th>
-                <th className="text-left px-3 py-2 text-xs text-slate-500 font-semibold">Status</th>
-              </tr>
-            </thead>
-            <tbody>
-              {result.map((row, i) => (
-                <tr key={i} className="border-t border-slate-50 hover:bg-slate-50">
-                  <td className="px-3 py-2 text-slate-700">{row.client_name}</td>
-                  <td className="px-3 py-2 text-right font-semibold text-red-600">₱{fmt(row.sales_Balance || row.client_outstandingbalance || 0)}</td>
-                  <td className="px-3 py-2">
-                    <span className="text-xs px-2 py-0.5 rounded-full bg-amber-100 text-amber-700">
-                      {row.sales_paymentStatus || "Unpaid"}
-                    </span>
-                  </td>
-                </tr>
-              ))}
-              {result.length === 0 && (
-                <tr><td colSpan={3} className="text-center py-4 text-slate-400 text-xs">No outstanding balances 🎉</td></tr>
-              )}
-            </tbody>
-          </table>
-        </div>
-      );
-    }
-
-    // Top products
-    if (reportType === "top-products" && Array.isArray(result)) {
-      return (
-        <div className="mt-4 flex flex-col gap-2">
-          {result.map((p, i) => (
-            <div key={i} className="flex items-center justify-between bg-slate-50 rounded-lg px-4 py-2">
-              <div className="flex items-center gap-2">
-                <span className="text-xs font-bold text-slate-400 w-5">{i + 1}</span>
-                <span className="text-sm font-medium text-slate-700">{p.product_name}</span>
-              </div>
-              <span className="text-sm font-semibold text-blue-600">{p.total_qty_sold?.toLocaleString()} cases</span>
-            </div>
-          ))}
-        </div>
-      );
-    }
-
-    // Generic JSON fallback
-    return (
-      <pre className="mt-4 text-xs bg-slate-50 rounded-xl p-4 overflow-auto max-h-60 text-slate-700">
-        {JSON.stringify(result, null, 2)}
-      </pre>
-    );
-  };
-
-}
-
-// ══════════════════════════════════════════════════════════════════════════════
 // MAIN EXPORT — QuickActions (drop-in replacement for the buttons section)
 // ══════════════════════════════════════════════════════════════════════════════
 export default function QuickActions() {
   const [modal, setModal] = useState(null); // "sale" | "inventory" | "customer" | "report"
   const [toast, setToast] = useState(null); // { message, type }
+  const [clients, setClients] = useState([]);
+  const [products, setProducts] = useState([]);
+
+  useEffect(() => {
+    const loadData = async () => {
+      try {
+        const [clientsRes, productsRes] = await Promise.all([
+          fetch("/api/client"),
+          fetch("/api/products"),
+        ]);
+        const clientsData = clientsRes.ok ? await clientsRes.json() : [];
+        const productsData = productsRes.ok ? await productsRes.json() : [];
+        setClients(clientsData);
+        setProducts(productsData);
+      } catch (error) {
+        console.error("Failed to load quickaction references", error);
+      }
+    };
+    loadData();
+  }, []);
 
   const showToast = (message, type = "success") => setToast({ message, type });
 
@@ -624,6 +611,8 @@ export default function QuickActions() {
         open={modal === "sale"}
         onClose={() => setModal(null)}
         onSuccess={showToast}
+        clients={clients}
+        products={products}
       />
       <CheckInventoryModal
         open={modal === "inventory"}
@@ -633,10 +622,6 @@ export default function QuickActions() {
         open={modal === "customer"}
         onClose={() => setModal(null)}
         onSuccess={showToast}
-      />
-      <GenerateReportModal
-        open={modal === "report"}
-        onClose={() => setModal(null)}
       />
 
       {/* Toast Notifications */}
