@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 
-// ─── Helpers ──────────────────────────────────────────────────────────────────
+// ─── Helpers
 const getStatus = (stock, reorder) => {
   if (stock <= 0) return { label: "Out of Stock", cls: "bg-red-100 text-red-700" };
   if (stock <= reorder) return { label: "Low Stock", cls: "bg-amber-100 text-amber-700" };
@@ -14,7 +14,7 @@ const formatDateOnly = (dateStr) => {
   return dateStr.split('T')[0];
 };
 
-// ─── Record Warehouse Damage Modal ───────────────────────────────────────────
+// ─── Record Warehouse Damage Modal 
 function WarehouseDamageModal({ products, onClose, onSuccess }) {
   const [managers,   setManagers]   = useState([]);
   const [employees,  setEmployees]  = useState([]);
@@ -171,7 +171,7 @@ function WarehouseDamageModal({ products, onClose, onSuccess }) {
   );
 }
 
-// ─── Record Delivery Damage Modal ─────────────────────────────────────────────
+// ─── Record Delivery Damage Modal 
 function DeliveryDamageModal({ onClose, onSuccess, initialShipmentID = "" }) {
   const [shipmentID,  setShipmentID]  = useState(String(initialShipmentID));
   const [loadingShip, setLoadingShip] = useState(false);
@@ -363,7 +363,7 @@ function DeliveryDamageModal({ onClose, onSuccess, initialShipmentID = "" }) {
   );
 }
 
-// ─── Bad Order Modal ──────────────────────────────────────────────────────────
+// ─── Bad Order Modal 
 function BadOrderModal({ products, onClose, onSuccess }) {
   const [managers,   setManagers]   = useState([]);
   const [employees,  setEmployees]  = useState([]);
@@ -517,7 +517,7 @@ function BadOrderModal({ products, onClose, onSuccess }) {
   );
 }
 
-// ─── Toast ────────────────────────────────────────────────────────────────────
+// ─── Toast 
 function Toast({ message, type, onDone }) {
   useEffect(() => { const t = setTimeout(onDone, 3500); return () => clearTimeout(t); }, []);
   return (
@@ -527,9 +527,8 @@ function Toast({ message, type, onDone }) {
   );
 }
 
-// ══════════════════════════════════════════════════════════════════════════════
+
 // PAGE
-// ══════════════════════════════════════════════════════════════════════════════
 export default function Inventory() {
   const [products,     setProducts]     = useState([]);
   const [loading,      setLoading]      = useState(true);
@@ -552,7 +551,7 @@ export default function Inventory() {
   const [showDeliveryDmgModal,  setShowDeliveryDmgModal]  = useState(false);
   const [showBadOrderModal,     setShowBadOrderModal]     = useState(false);
 
-  // ─── Fetch ─────────────────────────────────────────────────────────────────
+  // ─── Fetch 
   const fetchInventory = async () => {
     setLoading(true);
     try {
@@ -593,7 +592,7 @@ export default function Inventory() {
     fetchDamages();
   }, []);
 
-  // ─── Derived ───────────────────────────────────────────────────────────────
+  // ─── Derived
   const filtered = products.filter((p) => {
     const { label } = getStatus(p.product_stockQty, p.product_reorderPoint);
     const searchTerm = search.toLowerCase();
@@ -619,7 +618,7 @@ export default function Inventory() {
   const warehouseOnly = warehouseDamages.filter(d => d.damage_type === "Warehouse" || !d.damage_type);
   const badOrdersOnly = warehouseDamages.filter(d => d.damage_type === "Bad Order");
 
-  // ─── Handlers ──────────────────────────────────────────────────────────────
+  // ─── Handlers
   const handleSubmit = async (e) => {
     e.preventDefault();
     try {
@@ -669,7 +668,7 @@ export default function Inventory() {
     } catch {}
   };
 
-  // ──────────────────────────────────────────────────────────────────────────
+
   return (
     <div className="flex flex-col gap-6">
 
@@ -781,7 +780,7 @@ export default function Inventory() {
         </div>
       </div>
 
-      {/* ── Damage Records Section ─────────────────────────────────────────── */}
+      {/* ── Damage Records Section */}
       <div className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
         {/* Section header */}
         <div className="px-6 py-4 border-b border-slate-100 flex flex-wrap items-center justify-between gap-3">
@@ -917,7 +916,7 @@ export default function Inventory() {
         </div>
       </div>
 
-      {/* ── Modals ─────────────────────────────────────────────────────────── */}
+      {/* ── Modals */}
 
       {/* Add Product */}
       {isModalOpen && (
