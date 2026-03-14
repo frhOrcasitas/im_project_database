@@ -9,7 +9,7 @@ function parsePcsPerCase(unitStr) {
   return match ? parseInt(match[1]) : null;
 }
 
-// ── Inline Delivery Damage Modal ─────────────────────────────────────────────
+// ── Inline Delivery Damage Modal 
 function DeliveryDamageModal({ onClose, onSuccess, initialShipmentID = "" }) {
   const [shipmentID,  setShipmentID]  = useState(String(initialShipmentID));
   const [loadingShip, setLoadingShip] = useState(false);
@@ -198,7 +198,7 @@ const flowSteps = [
   { icon: "💳", label: "Payment",          sub: "Record payment/balance",     color: "border-green-400 bg-green-50" },
 ];
 
-// ─── Ship Modal ───────────────────────────────────────────────────────────────
+// ─── Ship Modal 
 function ShipModal({ order, onClose, onSuccess }) {
   const [vehicles,   setVehicles]   = useState([]);
   const [managers,   setManagers]   = useState([]);
@@ -399,11 +399,11 @@ function ShipModal({ order, onClose, onSuccess }) {
   );
 }
 
-// ─── New Sale Modal ───────────────────────────────────────────────────────────
+// ─── New Sale Modal 
 const _inputCls  = "w-full border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition";
 const _selectCls = _inputCls + " bg-white";
  
-// ─── NewSaleModal ─────────────────────────────────────────────────────────────
+// ─── NewSaleModal 
  
 function SaleField({ label, required, children }) {
   return (
@@ -416,17 +416,6 @@ function SaleField({ label, required, children }) {
   );
 }
  
-// ─── NewSaleModal ─────────────────────────────────────────────────────────────
- 
-// ══════════════════════════════════════════════════════════════════════════════
-// NEW SALE MODAL — drop this into QuickActions, orders/page.js, wherever needed
-// ══════════════════════════════════════════════════════════════════════════════
-
-// Required at top of file (if not already there):
-// const _inputCls  = "w-full border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition";
-// const _selectCls = _inputCls + " bg-white";
-// function SaleField({ label, required, children }) { ... }
-// function parsePcsPerCase(unitStr) { ... }
 
 function NewSaleModal({ open, onClose, onSuccess, clients = [], products = [] }) {
   const emptyItem = { productLine_ID: "", quantity: 1, unitPrice: "", unitType: "Cases", remainder: 0 };
@@ -452,7 +441,6 @@ function NewSaleModal({ open, onClose, onSuccess, clients = [], products = [] })
       .catch(() => setEmployees([]));
   }, [open]);
 
-  // ← Early return AFTER all hooks
   if (!open) return null;
 
   const setField = (key, val) => setForm(f => ({ ...f, [key]: val }));
@@ -724,7 +712,7 @@ function NewSaleModal({ open, onClose, onSuccess, clients = [], products = [] })
   );
 }
 
-// ─── Toast ────────────────────────────────────────────────────────────────────
+// ─── Toast 
 function Toast({ message, type, onDone }) {
   useEffect(() => { const t = setTimeout(onDone, 3500); return () => clearTimeout(t); }, []);
   return (
@@ -734,7 +722,7 @@ function Toast({ message, type, onDone }) {
   );
 }
 
-// ─── Vehicle Modal ────────────────────────────────────────────────────────────
+// ─── Vehicle Modal 
 const EMPTY_VEHICLE = { vehicle_ID: "", vehicle_number: "", vehicle_model: "", vehicle_description: "" };
 
 function VehicleModal({ mode, initial, onClose, onSuccess }) {
@@ -813,9 +801,7 @@ function VehicleModal({ mode, initial, onClose, onSuccess }) {
   );
 }
 
-// ══════════════════════════════════════════════════════════════════════════════
 // PAGE
-// ══════════════════════════════════════════════════════════════════════════════
 export default function Orders() {
   const [sales,          setSales]          = useState([]);
   const [loading,        setLoading]        = useState(true);
