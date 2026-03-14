@@ -2,7 +2,6 @@ import pool from "../../../../lib/db";
 
 export async function GET(req, { params }) {
     try {
-        // Next.js 15: params is a promise
         const { id } = await params;
 
         const [rows] = await pool.query(
