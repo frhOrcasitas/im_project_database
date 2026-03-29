@@ -39,6 +39,7 @@ export async function POST(req) {
 
     return Response.json({ success: true, role: user.system_role, name: user.employee_name });
   } catch (error) {
+    console.error("Login error: ", error.message, error.stack);
     return Response.json({ error: error.message }, { status: 500 });
   }
 }
