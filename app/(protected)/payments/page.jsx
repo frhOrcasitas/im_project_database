@@ -280,12 +280,14 @@ function PaymentPanel({ salesId, onPaymentSuccess }) {
     try {
       const res = await fetch(`/api/sales/${salesId}/payment`, {
         method: "POST",
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           client_id: sale.client_ID,
           employee_id: form.employee_ID,
           amount: amountEntered,
           or_number: form.payment_ORNumber,
           type: form.payment_type,
+          paid_date: form.payment_paidDate,
         })
       });
       const data = await res.json();
@@ -466,7 +468,7 @@ function PaymentPanel({ salesId, onPaymentSuccess }) {
             <Field label="OR Number">
               <input
                 className={inputCls}
-                type="text" placeholder="Official receipt #"
+                type="text" placeholder="Official receipt # (e.g., OR-0001)"
                 value={form.payment_ORNumber}
                 onChange={(e) => setField("payment_ORNumber", e.target.value)}
               />

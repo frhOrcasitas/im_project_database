@@ -1,18 +1,16 @@
 import pool from "../../lib/db";
 import { NextResponse } from "next/server";
 
-// Helper: parse pcs_per_case from unit string e.g. "3.8kgx4" → 4
 function parsePcsPerCase(unitStr) {
   if (!unitStr) return null;
   const match = unitStr.match(/x\s*(\d+)/i);
   return match ? parseInt(match[1]) : null;
 }
 
-// Helper: calculate pieces to deduct based on unit type
 function calcPiecesToDeduct(qty, unitType, remainder, pcsPerCase) {
   if (unitType === "Pieces") return qty;
   if (unitType === "Cases") {
-    if (!pcsPerCase) return qty; // fallback if no conversion available
+    if (!pcsPerCase) return qty;
     return (qty * pcsPerCase) + (remainder || 0);
   }
   return qty;
@@ -34,43 +32,67 @@ export async function POST(request) {
       items,
       payment,
       sales_SINumber,
-      sales_DRNumber,
-      sales_SWSNumber
+      sales_SWSNumber,
+      // DR removed — DR now belongs on shipment, not sale creation
     } = body;
 
     if (!items || items.length === 0) {
-      return NextResponse.json({ error: "Sale must contain at least one item." }, { status: 400 });
+      throw new Error("Sale must contain at least one item.");
     }
 
-    // 1. Calculate total based on qty * price (qty here is cases or pieces — price is already correct per unit type)
+    if (!client_ID) throw new Error("Client is required.");
+    if (!employee_ID) throw new Error("Employee is required.");
+
+    // SI uniqueness check
+    if (sales_SINumber) {
+      const [existingSI] = await connection.query(
+        `SELECT sales_ID FROM tbl_sales WHERE sales_SINumber = ?`,
+        [sales_SINumber]
+      );
+      if (existingSI.length > 0) {
+        throw new Error(`SI Number "${sales_SINumber}" already exists.`);
+      }
+    }
+
+    // SWS uniqueness check
+    if (sales_SWSNumber) {
+      const [existingSWS] = await connection.query(
+        `SELECT sales_ID FROM tbl_sales WHERE sales_SWSNumber = ?`,
+        [sales_SWSNumber]
+      );
+      if (existingSWS.length > 0) {
+        throw new Error(`SWS Number "${sales_SWSNumber}" already exists.`);
+      }
+    }
+
+    // 1. Calculate total
     let totalAmount = 0;
     for (const item of items) {
-      const qty = item.quantity || item.qty;
+      const qty   = item.quantity || item.qty;
       const price = item.unitPrice || item.price;
       totalAmount += qty * price;
     }
 
-    // 2. Insert into tbl_sales
+    // 2. Insert into tbl_sales (no DR column — DR is on shipment)
     const [saleResult] = await connection.query(
       `INSERT INTO tbl_sales 
        (client_ID, employee_ID, sales_notes, sales_totalAmount, sales_status,
-        sales_paymentStatus, sales_Balance, sales_SINumber, sales_DRNumber, sales_SWSNumber)
-       VALUES (?, ?, ?, ?, 'Pending', 'Unpaid', ?, ?, ?, ?)`,
+        sales_paymentStatus, sales_Balance, sales_SINumber, sales_SWSNumber)
+       VALUES (?, ?, ?, ?, 'Pending', 'Unpaid', ?, ?, ?)`,
       [
         client_ID,
         employee_ID || null,
         sales_notes || null,
         totalAmount,
         totalAmount,
-        sales_SINumber || null,
-        sales_DRNumber || null,
-        sales_SWSNumber || null
+        sales_SINumber  || null,
+        sales_SWSNumber || null,
       ]
     );
 
     const sales_ID = saleResult.insertId;
 
-    // 3. Insert items + deduct stock with unit type math
+    // 3. Insert items + deduct stock
     for (const item of items) {
       const qty       = item.quantity || item.qty;
       const price     = item.unitPrice || item.price;
@@ -79,12 +101,10 @@ export async function POST(request) {
       const unitType  = item.unitType  || "Cases";
       const remainder = item.remainder || 0;
 
-      // Fetch product to get pcs_per_case from unit string
       const [[product]] = await connection.query(
         `SELECT product_unitOfMeasure, product_stockQty FROM tbl_product WHERE product_ID = ?`,
         [prod_ID]
       );
-
       if (!product) throw new Error(`Product ID ${prod_ID} not found.`);
 
       const pcsPerCase     = parsePcsPerCase(product.product_unitOfMeasure);
@@ -97,13 +117,11 @@ export async function POST(request) {
         );
       }
 
-      // Deduct stock in pieces
       await connection.query(
         `UPDATE tbl_product SET product_stockQty = product_stockQty - ? WHERE product_ID = ?`,
         [piecesToDeduct, prod_ID]
       );
 
-      // Insert sales detail with unit type and remainder
       await connection.query(
         `INSERT INTO tbl_sales_details
          (sales_ID, productLine_ID, salesDetail_qty, salesDetail_unitPriceSold,
@@ -134,11 +152,11 @@ export async function POST(request) {
       await connection.query(
         `UPDATE tbl_client c
          SET c.client_outstandingbalance = (
-            SELECT COALESCE(SUM(s.sales_Balance), 0)
-            FROM tbl_sales s
-            WHERE s.client_ID = ?
-            AND s.sales_paymentStatus != 'Paid'
-            AND s.sales_status != 'Cancelled'
+           SELECT COALESCE(SUM(s.sales_Balance), 0)
+           FROM tbl_sales s
+           WHERE s.client_ID = ?
+           AND s.sales_paymentStatus != 'Paid'
+           AND s.sales_status != 'Cancelled'
          )
          WHERE c.client_ID = ?`,
         [client_ID, client_ID]
@@ -180,7 +198,7 @@ export async function GET() {
           s.sales_status,
           s.sales_paymentStatus,
           s.sales_SINumber,
-          s.sales_DRNumber
+          s.sales_SWSNumber
        FROM tbl_sales s
        LEFT JOIN tbl_client c ON s.client_ID = c.client_ID
        ORDER BY s.sales_ID DESC`

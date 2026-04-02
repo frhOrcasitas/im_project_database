@@ -9,9 +9,22 @@ export async function POST(req, { params }) {
   if (!amount)      return Response.json({ error: "Missing amount." },       { status: 400 });
   if (!employee_id) return Response.json({ error: "Missing employee_id." }, { status: 400 });
 
+  // ← connection declared FIRST before any query
   const connection = await pool.getConnection();
   try {
     await connection.beginTransaction();
+
+    // Validate OR number uniqueness if provided
+    if (or_number) {
+      const [existingOR] = await connection.query(
+        `SELECT payment_ID FROM tbl_payment_details WHERE payment_ORNumber = ?`,
+        [or_number]
+      );
+      if (existingOR.length > 0) {
+        await connection.rollback();
+        return Response.json({ error: `OR Number "${or_number}" already exists.` }, { status: 400 });
+      }
+    }
 
     // 1. Get sale total
     const [[sale]] = await connection.query(
@@ -50,7 +63,7 @@ export async function POST(req, { params }) {
       `INSERT INTO tbl_payment_details
          (sales_ID, employee_ID, payment_amount, payment_ORNumber, payment_type, payment_paidDate)
        VALUES (?, ?, ?, ?, ?, CURDATE())`,
-      [sales_ID, employee_id, paid, or_number || null, type || "Cash"]
+      [sales_ID, employee_id, paid, or_number || null, type || "Cash", paid_date || new Date().toISOString().split("T")[0]]
     );
 
     // 6. Update sale balance and payment status

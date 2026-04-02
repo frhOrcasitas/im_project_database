@@ -36,7 +36,6 @@ export default function Sales() {
   const [isSubmitting,          setIsSubmitting]          = useState(false);
 
   const [siNumber,  setSiNumber]  = useState("");
-  const [drNumber,  setDrNumber]  = useState("");
   const [swsNumber, setSwsNumber] = useState("");
 
   const isStep1Complete = !!selectedCustomer;
@@ -128,7 +127,6 @@ export default function Sales() {
       employee_ID:     currentEmployee.id,
       sales_notes:     orderNotes,
       sales_SINumber:  siNumber  || null,
-      sales_DRNumber:  drNumber  || null,
       sales_SWSNumber: swsNumber || null,
       items: orderItems.map(item => ({
         productLine_ID: item.product_ID,
@@ -160,7 +158,7 @@ export default function Sales() {
         setQuantities({});
         setPaymentAmount(0);
         setOrderNotes("");
-        setSiNumber(""); setDrNumber(""); setSwsNumber("");
+        setSiNumber(""); setSwsNumber("");
         setStep(1);
         setIsSubmitting(false);
       } else {
@@ -344,20 +342,18 @@ export default function Sales() {
             </div>
             <div className="grid grid-cols-3 gap-3 mt-4 pt-4 border-t border-gray-100">
               <div>
-                <label className="block text-sm font-bold text-gray-800 mb-1">SI Number</label>
-                <input type="number" placeholder="SI #" value={siNumber}
+                <label className="block text-sm font-bold text-gray-800 mb-1">
+                  SI Number <span className="text-xs text-gray-500">(Sales Invoice) * </span>
+                </label>
+                <input type="text" placeholder="SI #" value={siNumber}
                   onChange={e => setSiNumber(e.target.value)}
                   className="w-full border border-gray-400 rounded px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500" />
               </div>
               <div>
-                <label className="block text-sm font-bold text-gray-800 mb-1">DR Number</label>
-                <input type="number" placeholder="DR #" value={drNumber}
-                  onChange={e => setDrNumber(e.target.value)}
-                  className="w-full border border-gray-400 rounded px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500" />
-              </div>
-              <div>
-                <label className="block text-sm font-bold text-gray-800 mb-1">SWS Number</label>
-                <input type="number" placeholder="SWS #" value={swsNumber}
+                <label className="block text-sm font-bold text-gray-800 mb-1">
+                  SWS Number <span className="text-xs text-gray-500">(optional)</span>
+                </label>
+                <input type="text" placeholder="SWS #" value={swsNumber}
                   onChange={e => setSwsNumber(e.target.value)}
                   className="w-full border border-gray-400 rounded px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500" />
               </div>

@@ -692,8 +692,6 @@ export default function Inventory() {
           { label: "In Stock",          val: stats.inStock,     color: "text-green-600" },
           { label: "Low Stock",         val: stats.lowStock,    color: "text-amber-500" },
           { label: "Out of Stock",      val: stats.outOfStock,  color: "text-red-500" },
-          { label: "Total Value",       val: `₱${stats.totalValue.toLocaleString()}`, color: "text-blue-600" },
-          { label: "Total Damage Loss", val: `₱${totalDamageLoss.toLocaleString()}`,  color: "text-red-600" },
         ].map(s => (
           <div key={s.label} className="bg-white rounded-xl shadow-sm p-4 border border-slate-100">
             <div className="text-[10px] text-slate-400 uppercase font-bold tracking-widest mb-1">{s.label}</div>

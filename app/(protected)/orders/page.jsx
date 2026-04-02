@@ -55,6 +55,7 @@ function DeliveryDamageModal({ onClose, onSuccess, initialShipmentID = "" }) {
     for (const s of selected) {
       if (Number(s.damage_quantity) < 1) return setError(`Qty must be ≥ 1 for "${s.product_name}".`);
       if (Number(s.damage_quantity) > s.shipped_qty) return setError(`Qty for "${s.product_name}" exceeds shipped qty (${s.shipped_qty}).`);
+      if (!form.dr_number.trim()) return setError("DR Number is required.");
     }
     setSubmitting(true); setError("");
     try {
@@ -207,7 +208,7 @@ function ShipModal({ order, onClose, onSuccess }) {
   const [loading,    setLoading]    = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [error,      setError]      = useState("");
-  const [form, setForm] = useState({ vehicle_id: "", manager_id: "", selectedEmployees: [] });
+  const [form, setForm] = useState({ vehicle_id: "", manager_id: "", selectedEmployees: [], dr_number: "" });
 
   useEffect(() => {
     async function load() {
@@ -255,6 +256,7 @@ function ShipModal({ order, onClose, onSuccess }) {
           sales_ID:   order.sales_ID,
           manager_id: form.manager_id,
           vehicle_id: form.vehicle_id,
+          shipment_DRNumber: form.dr_number,
           items:      items.map(i => ({ productLine_ID: i.productLine_ID || i.product_ID, quantity: i.ship_qty })),
           employees:  form.selectedEmployees,
         }),
@@ -332,6 +334,16 @@ function ShipModal({ order, onClose, onSuccess }) {
                 <p className="text-xs text-slate-400 mt-1.5 italic">All items will be shipped.</p>
               </div>
 
+              <div>
+                <label className="text-xs font-bold text-slate-500 uppercase tracking-wide block mb-1.5">DR NUMBER (Delivery Receipt) <span className="text-red-400">*</span></label>
+                <input 
+                  type="text"
+                  placeholder="e.g. DR-2026-0001"
+                  className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-800 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  value={form.dr_number}
+                  onChange={e => setForm(f => ({ ...f, dr_number: e.target.value }))}
+                />
+              </div>
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="text-xs font-bold text-slate-500 uppercase tracking-wide block mb-1.5">Vehicle <span className="text-red-400">*</span></label>
@@ -422,7 +434,7 @@ function NewSaleModal({ open, onClose, onSuccess, clients = [], products = [] })
 
   const [form, setForm] = useState({
     client_ID: "", employee_ID: "", sales_notes: "",
-    sales_SINumber: "", sales_DRNumber: "", sales_SWSNumber: "",
+    sales_SINumber: "", sales_SWSNumber: "",
     items: [{ ...emptyItem }],
     payment: { payment_type: "Cash", payment_amount: "", employee_ID: "" },
   });
@@ -470,6 +482,7 @@ function NewSaleModal({ open, onClose, onSuccess, clients = [], products = [] })
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+
     setLoading(true);
     setError("");
     try {
@@ -535,16 +548,12 @@ function NewSaleModal({ open, onClose, onSuccess, clients = [], products = [] })
 
             {/* Receipt Numbers */}
             <div className="grid grid-cols-3 gap-3">
-              <SaleField label="SI Number">
-                <input className={_inputCls} type="number" placeholder="SI #"
+              <SaleField label="SI Number (Sales Invoice)">
+                <input className={_inputCls} type="text" placeholder="SI # (for mall clients)"
                   value={form.sales_SINumber} onChange={e => setField("sales_SINumber", e.target.value)} />
               </SaleField>
-              <SaleField label="DR Number">
-                <input className={_inputCls} type="number" placeholder="DR #"
-                  value={form.sales_DRNumber} onChange={e => setField("sales_DRNumber", e.target.value)} />
-              </SaleField>
               <SaleField label="SWS Number">
-                <input className={_inputCls} type="number" placeholder="SWS #"
+                <input className={_inputCls} type="text" placeholder="SWS # (optional)"
                   value={form.sales_SWSNumber} onChange={e => setField("sales_SWSNumber", e.target.value)} />
               </SaleField>
             </div>
