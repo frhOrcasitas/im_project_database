@@ -423,7 +423,6 @@ export default function Sales() {
                         )}
                       </label>
                       <div className="relative">
-                        <span className="absolute left-2 top-1.5 text-blue-700 font-bold text-sm">₱</span>
                         <input
                           type="number"
                           step="1"
@@ -467,19 +466,6 @@ export default function Sales() {
                           disabled={outOfStock}
                         />
                       </div>
-                      {cardUnit === "Cases" && (
-                        <div className="w-16">
-                          <label className="text-[10px] text-gray-500 font-bold uppercase block mb-0.5">+Pcs</label>
-                          <input
-                            type="number" min={0}
-                            value={cardRem}
-                            onChange={(e) => { e.stopPropagation(); setRemainder(pid, e.target.value); }}
-                            onClick={(e) => e.stopPropagation()}
-                            className="w-full border border-gray-300 rounded px-2 py-1 text-sm text-gray-600"
-                            disabled={outOfStock}
-                          />
-                        </div>
-                      )}
                     </div>
 
                     {/* Pieces preview */}

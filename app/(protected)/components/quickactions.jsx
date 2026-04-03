@@ -228,10 +228,6 @@ export default function QuickActions() {
           className="w-full bg-blue-600 hover:bg-blue-700 text-white font-medium py-2.5 px-4 rounded-lg text-center text-sm transition-colors">
           📦 Check Inventory
         </button>
-        <button onClick={() => setModal("customer")}
-          className="w-full bg-slate-200 hover:bg-slate-300 text-slate-700 font-medium py-2.5 px-4 rounded-lg text-center text-sm transition-colors">
-          👥 Add Customer
-        </button>
       </div>
 
       {/* Modals */}
