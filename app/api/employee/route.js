@@ -6,7 +6,7 @@ export async function GET() {
     const [rows] = await pool.query(`
       SELECT 
         e.*,
-        CASE WHEN m.employee_ID IS NOT NULL AND m.manager_status = 'Active' THEN 1 ELSE 0 END AS isManager,
+        CASE WHEN m.employee_ID IS NOT NULL AND LOWER(m.manager_status) = 'active' THEN 1 ELSE 0 END AS isManager,
         m.manager_ID,
         m.manager_dateStarted,
         m.manager_status,

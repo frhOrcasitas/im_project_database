@@ -148,38 +148,40 @@ function CheckInventoryModal({ open, onClose }) {
 
             {/* Product rows */}
             <div className="border border-slate-100 rounded-xl overflow-hidden">
-              <table className="w-full text-sm">
-                <thead className="bg-slate-50">
-                  <tr>
-                    <th className="text-left px-4 py-2 text-xs text-slate-500 font-semibold">Product</th>
-                    <th className="text-left px-4 py-2 text-xs text-slate-500 font-semibold">Unit</th>
-                    <th className="text-right px-4 py-2 text-xs text-slate-500 font-semibold">Stock</th>
-                    <th className="text-left px-4 py-2 text-xs text-slate-500 font-semibold">Status</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {filtered.map((p) => {
-                    const pcsPerCase = parsePcsPerCase(p.product_unit);
-                    const cases = pcsPerCase ? Math.floor(p.product_stockQty / pcsPerCase) : null;
-                    const remainder = pcsPerCase ? p.product_stockQty % pcsPerCase : null;
-                    return (
-                      <tr key={p.product_ID} className="border-t border-slate-50 hover:bg-slate-50 transition-colors">
-                        <td className="px-4 py-2.5 font-medium text-slate-700">{p.product_name}</td>
-                        <td className="px-4 py-2.5 text-xs text-slate-400">{p.product_unit || "—"}</td>
-                        <td className="px-4 py-2.5 text-right">
-                          <span className="font-semibold text-slate-800">{p.product_stockQty} pcs</span>
-                          {pcsPerCase && (
-                            <span className="text-xs text-slate-400 ml-1">
-                              ({cases} case{cases !== 1 ? "s" : ""}{remainder > 0 ? ` + ${remainder} pcs` : ""})
-                            </span>
-                          )}
-                        </td>
-                        <td className="px-4 py-2.5">{stockBadge(p.product_stockQty)}</td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
+              <div className="overflow-y-auto max-h-[300px]">
+                <table className="w-full text-sm">
+                  <thead className="bg-slate-50">
+                    <tr>
+                      <th className="text-left px-4 py-2 text-xs text-slate-500 font-semibold">Product</th>
+                      <th className="text-left px-4 py-2 text-xs text-slate-500 font-semibold">Unit</th>
+                      <th className="text-right px-4 py-2 text-xs text-slate-500 font-semibold">Stock</th>
+                      <th className="text-left px-4 py-2 text-xs text-slate-500 font-semibold">Status</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {filtered.map((p) => {
+                      const pcsPerCase = parsePcsPerCase(p.product_unit);
+                      const cases = pcsPerCase ? Math.floor(p.product_stockQty / pcsPerCase) : null;
+                      const remainder = pcsPerCase ? p.product_stockQty % pcsPerCase : null;
+                      return (
+                        <tr key={p.product_ID} className="border-t border-slate-50 hover:bg-slate-50 transition-colors">
+                          <td className="px-4 py-2.5 font-medium text-slate-700">{p.product_name}</td>
+                          <td className="px-4 py-2.5 text-xs text-slate-400">{p.product_unit || "—"}</td>
+                          <td className="px-4 py-2.5 text-right">
+                            <span className="font-semibold text-slate-800">{p.product_stockQty} pcs</span>
+                            {pcsPerCase && (
+                              <span className="text-xs text-slate-400 ml-1">
+                                ({cases} case{cases !== 1 ? "s" : ""}{remainder > 0 ? ` + ${remainder} pcs` : ""})
+                              </span>
+                            )}
+                          </td>
+                          <td className="px-4 py-2.5">{stockBadge(p.product_stockQty)}</td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
             </div>
           </div>
         )}

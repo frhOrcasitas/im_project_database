@@ -164,7 +164,7 @@ export default function Receivables() {
           />
         </div>
 
-        <div className="overflow-x-auto">
+        <div className="overflow-x-auto overflow-y-auto max-h-[500px]">
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-slate-200">

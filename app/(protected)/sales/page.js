@@ -120,6 +120,7 @@ export default function Sales() {
     if (!selectedCustomer) return alert("Please select a customer.");
     if (orderItems.length === 0) return alert("Order is empty.");
     if (!paymentType) return alert("Please select a payment type.");
+    if (!siNumber.trim()) return alert("Please enter the SI Number (Sales Invoice).");
     if (isSubmitting) return;
 
     const salePayload = {

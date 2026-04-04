@@ -28,7 +28,7 @@ function WarehouseDamageModal({ products, onClose, onSuccess }) {
       .then(res => res.json())
       .then(data => {
         const all = Array.isArray(data) ? data : [];
-        setManagers(all.filter(e => Number(e.isManager) === 1));
+        setManagers(all.filter(e => Number(e.isManager) === 1 && e.manager_ID !== 0));
         setEmployees(all.filter(e => e.employee_status === "Active"));
       })
       .catch(err => console.error("Error fetching employees:", err));
@@ -377,7 +377,7 @@ function BadOrderModal({ products, onClose, onSuccess }) {
       .then(res => res.json())
       .then(data => {
         const all = Array.isArray(data) ? data : [];
-        setManagers(all.filter(e => Number(e.isManager) === 1));
+        setManagers(all.filter(e => Number(e.isManager) === 1 && e.manager_ID !== 0));
         setEmployees(all.filter(e => e.employee_status === "Active" && e.employee_ID !== 0));
       });
   }, []);
@@ -721,7 +721,7 @@ export default function Inventory() {
           </div>
         </div>
 
-        <div className="overflow-auto max-h-[60vh]">
+        <div className="overflow-auto max-h-[500px]">
           <table className="w-full text-left border-collapse">
             <thead className="top-0 bg-white shadow-sm">
               <tr className="text-[10px] font-bold text-slate-400 uppercase border-b border-slate-100">
@@ -823,27 +823,28 @@ export default function Inventory() {
         </div>
 
         {/* Table */}
-        <div className="overflow-x-auto">
+        <div className="overflow-x-auto overflow-y-auto max-h-[500px]">
           {damageLoading ? (
             <div className="py-10 text-center text-slate-400 text-sm">Loading damage records...</div>
           ) : damageTab === "warehouse" ? (
-            <table className="w-full text-sm">
+            <table className="w-full text-sm min-w-[900px]">
               <thead>
                 <tr className="border-b border-slate-100">
-                  {["ID", "Date", "Product", "Qty", "Unit Cost", "Total Loss", "Description", "Employee", "Manager"].map(h => (
+                  {["ID", "Date", "Product", "Qty", "Unit", "Unit Cost", "Total Loss", "Description", "Employee", "Manager"].map(h => (
                     <th key={h} className="text-left px-4 py-3 text-[10px] font-bold text-slate-400 uppercase tracking-widest">{h}</th>
                   ))}
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-50">
                 {warehouseOnly.length === 0 ? (
-                  <tr><td colSpan="9" className="py-10 text-center text-slate-400 italic text-xs">No warehouse damage records.</td></tr>
+                  <tr><td colSpan="10" className="py-10 text-center text-slate-400 italic text-xs">No warehouse damage records.</td></tr>
                 ) : warehouseOnly.map(d => (
                   <tr key={d.damage_ID} className="hover:bg-slate-50">
                     <td className="px-4 py-3 font-bold text-slate-500 text-xs">DMG-{d.damage_ID}</td>
                     <td className="px-4 py-3 font-medium text-slate-700">{formatDateOnly(d.damage_date)}</td>
                     <td className="px-4 py-3 font-medium text-slate-700">{d.product_name}</td>
                     <td className="px-4 py-3 text-red-600 font-bold">{d.damage_quantity}</td>
+                    <td className="px-4 py-3 text-slate-500 text-sm uppercase tracking-wide">{d.product_unit || '—'}</td>
                     <td className="px-4 py-3 text-slate-500">₱{Number(d.damage_amount || 0).toLocaleString()}</td>
                     <td className="px-4 py-3 font-bold text-red-600">₱{Number(d.damage_subtotal || 0).toLocaleString()}</td>
                     <td className="px-4 py-3 text-slate-500 text-xs max-w-[160px] truncate">{d.damage_description || <span className="italic text-slate-300">—</span>}</td>
@@ -854,17 +855,17 @@ export default function Inventory() {
               </tbody>
             </table>
           ) : damageTab === "delivery" ? (
-            <table className="w-full text-sm">
+            <table className="w-full min-w-[900px] text-sm">
               <thead>
                 <tr className="border-b border-slate-100">
-                  {["ID", "Shipment", "Product", "Date", "Qty", "Unit Cost", "Total Loss", "Description"].map(h => (
+                  {["ID", "Shipment", "Product", "Date", "Qty", "Unit", "Unit Cost", "Total Loss", "Description"].map(h => (
                     <th key={h} className="text-left px-4 py-3 text-[10px] font-bold text-slate-400 uppercase tracking-widest">{h}</th>
                   ))}
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-50">
                 {deliveryDamages.length === 0 ? (
-                  <tr><td colSpan="8" className="py-10 text-center text-slate-400 italic text-xs">No delivery damage records.</td></tr>
+                  <tr><td colSpan="9" className="py-10 text-center text-slate-400 italic text-xs">No delivery damage records.</td></tr>
                 ) : deliveryDamages
                     .filter((d, idx, arr) => arr.findIndex(x => x.damage_ID === d.damage_ID) === idx)
                     .map((d, idx) => (
@@ -876,6 +877,7 @@ export default function Inventory() {
                     <td className="px-4 py-3 font-medium text-slate-700">{d.product_name}</td>
                     <td className="px-4 py-3 text-slate-500 text-xs">{d.damage_date ? new Date(d.damage_date).toLocaleDateString() : "—"}</td>
                     <td className="px-4 py-3 text-red-600 font-bold">{d.damage_quantity}</td>
+                    <td className="px-4 py-3 text-slate-500 text-sm uppercase tracking-wide">{d.product_unit || '—'}</td>
                     <td className="px-4 py-3 text-slate-500">₱{Number(d.damage_amount || 0).toLocaleString()}</td>
                     <td className="px-4 py-3 font-bold text-red-600">₱{Number(d.damage_subtotal || 0).toLocaleString()}</td>
                     <td className="px-4 py-3 text-slate-500 text-xs max-w-[160px] truncate">{d.damage_description || <span className="italic text-slate-300">—</span>}</td>
@@ -884,23 +886,24 @@ export default function Inventory() {
               </tbody>
             </table>
           ) : (
-            <table className="w-full text-sm">
+            <table className="w-full text-sm min-w-[900px]">
               <thead>
                 <tr className="border-b border-slate-100">
-                  {["ID", "Date", "Product", "Qty", "Unit Cost", "Total Loss", "Description", "Employee", "Manager"].map(h => (
+                  {["ID", "Date", "Product", "Qty", "Unit", "Unit Cost", "Total Loss", "Description", "Employee", "Manager"].map(h => (
                     <th key={h} className="text-left px-4 py-3 text-[10px] font-bold text-slate-400 uppercase tracking-widest">{h}</th>
                   ))}
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-50">
                 {badOrdersOnly.length === 0 ? (
-                  <tr><td colSpan="9" className="py-10 text-center text-slate-400 italic text-xs">No bad order records.</td></tr>
+                  <tr><td colSpan="10" className="py-10 text-center text-slate-400 italic text-xs">No bad order records.</td></tr>
                 ) : badOrdersOnly.map(d => (
                   <tr key={d.damage_ID} className="hover:bg-slate-50">
                     <td className="px-4 py-3 font-bold text-slate-500 text-xs">BO-{d.damage_ID}</td>
                     <td className="px-4 py-3 font-medium text-slate-700">{formatDateOnly(d.damage_date)}</td>
                     <td className="px-4 py-3 font-medium text-slate-700">{d.product_name}</td>
                     <td className="px-4 py-3 text-red-600 font-bold">{d.damage_quantity}</td>
+                    <td className="px-4 py-3 text-slate-500 text-sm uppercase tracking-wide">{d.product_unit || '—'}</td>
                     <td className="px-4 py-3 text-slate-500">₱{Number(d.damage_amount || 0).toLocaleString()}</td>
                     <td className="px-4 py-3 font-bold text-red-600">₱{Number(d.damage_subtotal || 0).toLocaleString()}</td>
                     <td className="px-4 py-3 text-slate-500 text-xs max-w-[160px] truncate">{d.damage_description || <span className="italic text-slate-300">—</span>}</td>

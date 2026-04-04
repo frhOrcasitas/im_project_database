@@ -263,11 +263,12 @@ function PaymentPanel({ salesId, onPaymentSuccess }) {
 
   const setField = (key, val) => setForm((f) => ({ ...f, [key]: val }));
 
-  const balance       = sale ? parseFloat(sale.sales_Balance || 0) : 0;
-  const total         = sale ? parseFloat(sale.sales_totalAmount || 0) : 0;
-  const totalPaid     = total - balance;
-  const amountEntered = parseFloat(form.payment_amount) || 0;
-  const balanceAfter  = Math.max(0, balance - amountEntered);
+  const normalizeCurrency = (value) => Math.round((parseFloat(value) || 0) * 100) / 100;
+  const balance       = sale ? normalizeCurrency(sale.sales_Balance) : 0;
+  const total         = sale ? normalizeCurrency(sale.sales_totalAmount) : 0;
+  const totalPaid     = normalizeCurrency(total - balance);
+  const amountEntered = normalizeCurrency(form.payment_amount);
+  const balanceAfter  = Math.max(0, normalizeCurrency(balance - amountEntered));
   const willFullyPay  = amountEntered >= balance && balance > 0;
 
   const handleSubmit = async (e) => {
@@ -444,7 +445,11 @@ function PaymentPanel({ salesId, onPaymentSuccess }) {
             <Field label="Amount" required hint={`Max ₱${fmt(balance)}`}>
               <input
                 className={inputCls}
-                type="number" step="0.01" min="0.01" max={balance}
+                type="number"
+                step="0.01"
+                inputMode="decimal"
+                min="0.01"
+                max={balance}
                 placeholder="0.00"
                 value={form.payment_amount}
                 onChange={(e) => setField("payment_amount", e.target.value)}

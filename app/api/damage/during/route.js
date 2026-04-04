@@ -98,7 +98,8 @@ export async function GET() {
     const [rows] = await pool.query(
       `SELECT 
           d.*, 
-          p.product_name 
+          p.product_name,
+          p.product_unitOfMeasure AS product_unit
        FROM tbl_damage_during d
        JOIN tbl_shipment_productdetails spd ON d.productLine_id = spd.productLine_ID
        JOIN tbl_product p ON spd.product_ID = p.product_ID

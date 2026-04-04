@@ -74,7 +74,7 @@ export async function POST(req) {
 export async function GET() {
   try {
     const [rows] = await pool.query(
-      `SELECT d.damage_ID, d.product_id, p.product_name, d.damage_quantity,
+      `SELECT d.damage_ID, d.product_id, p.product_name, p.product_unitOfMeasure AS product_unit, d.damage_quantity,
           d.damage_amount, d.damage_subtotal, d.damage_description, d.damage_date,
           d.damage_type,
           e.employee_name, me.employee_name AS manager_name

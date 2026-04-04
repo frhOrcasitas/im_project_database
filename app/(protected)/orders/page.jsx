@@ -1,5 +1,8 @@
 "use client";
 
+// FIX THIS Over-shipping item 7. Max remaining: 0 
+
+
 import { useState, useEffect } from "react";
 
 // ─── Helper: parse pcs_per_case from unit string e.g. "3.8kgx4" → 4 ──────────
@@ -222,7 +225,7 @@ function ShipModal({ order, onClose, onSuccess }) {
         const [vData, mData, dData] = await Promise.all([vRes.json(), mRes.json(), dRes.json()]);
         setVehicles(Array.isArray(vData) ? vData : []);
         const allEmps = Array.isArray(mData) ? mData : [];
-        setManagers(allEmps.filter(e => Number(e.isManager) === 1));
+        setManagers(allEmps.filter(e => Number(e.isManager) === 1 && e.manager_ID !== 0));
         setEmployees(allEmps);
         setItems(Array.isArray(dData) ? dData.map(i => ({ ...i, ship_qty: i.salesDetail_qty })) : []);
       } catch {

@@ -68,17 +68,19 @@ function exportCSV(data, filename) {
 function TableWrapper({ headers, children, footer }) {
   return (
     <div className="border border-slate-100 rounded-xl overflow-hidden">
-      <table className="w-full text-sm">
-        <thead className="bg-slate-50">
-          <tr>
-            {headers.map((h) => (
-              <th key={h} className="text-left px-4 py-2.5 text-xs font-bold text-slate-500 uppercase tracking-wide">{h}</th>
-            ))}
-          </tr>
-        </thead>
-        <tbody>{children}</tbody>
-        {footer && <tfoot className="bg-slate-50 border-t border-slate-200">{footer}</tfoot>}
-      </table>
+      <div className="overflow-y-auto max-h-[500px]">
+        <table className="w-full text-sm">
+          <thead className="bg-slate-50 sticky top-0">
+            <tr>
+              {headers.map((h) => (
+                <th key={h} className="text-left px-4 py-2.5 text-xs font-bold text-slate-500 uppercase tracking-wide">{h}</th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>{children}</tbody>
+          {footer && <tfoot className="bg-slate-50 border-t border-slate-200">{footer}</tfoot>}
+        </table>
+      </div>
     </div>
   );
 }

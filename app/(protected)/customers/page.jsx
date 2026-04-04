@@ -123,14 +123,17 @@ export default function Customers() {
     e.preventDefault();
     if (!paymentForm.sales_id) return alert("Please select an invoice first.");
 
+    const amount = Math.round((Number(paymentForm.amount) || 0) * 100) / 100;
+    if (!Number.isFinite(amount) || amount <= 0) return alert("Please enter a valid payment amount.");
+
     try {
       const res = await fetch(`/api/sales/${paymentForm.sales_id}/payment`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          client_id:   selected.client_ID,       
+          client_id:   selected.client_ID,
           employee_id: paymentForm.employee_id,
-          amount:      parseFloat(paymentForm.amount),
+          amount,
           or_number:   paymentForm.or_number,
           type:        paymentForm.type,
         }),
@@ -249,7 +252,7 @@ export default function Customers() {
               <div className="p-5 border-b border-slate-100">
                  <h3 className="text-base font-bold text-slate-800">Recent Transaction History</h3>
               </div>
-              <div className="overflow-x-auto">
+              <div className="overflow-x-auto overflow-y-auto max-h-[500px]">
                 <table className="w-full text-left text-sm">
                   <thead>
                     <tr className="text-slate-500 bg-slate-50 border-b border-slate-200 uppercase text-[10px] font-bold tracking-widest">
@@ -363,7 +366,7 @@ export default function Customers() {
         <div className="grid grid-cols-2 gap-3">
           <div>
             <label className="text-[10px] font-bold text-slate-400 uppercase">Amount to Pay</label>
-            <input type="number" step="0.01" className="w-full border p-2 rounded-lg text-sm" required placeholder="0.00"
+            <input type="number" step="0.01" inputMode="decimal" className="w-full border p-2 rounded-lg text-sm" required placeholder="0.00"
               value={paymentForm.amount} onChange={e => setPaymentForm({...paymentForm, amount: e.target.value})} />
           </div>
           <div>

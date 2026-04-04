@@ -3,10 +3,12 @@ import pool from "../../../../lib/db";
 export async function POST(req, { params }) {
   const { id } = await params;
   const sales_ID = Number(id);
-  const { employee_id, amount, or_number, type } = await req.json();
+  const { employee_id, amount, or_number, type, paid_date } = await req.json();
 
   if (!sales_ID)    return Response.json({ error: "Missing sales_ID." },    { status: 400 });
-  if (!amount)      return Response.json({ error: "Missing amount." },       { status: 400 });
+  const normalizeCurrency = (value) => Math.round((Number(value) || 0) * 100) / 100;
+  const paid = normalizeCurrency(amount);
+  if (!Number.isFinite(paid) || paid <= 0) return Response.json({ error: "Missing or invalid amount." }, { status: 400 });
   if (!employee_id) return Response.json({ error: "Missing employee_id." }, { status: 400 });
 
   // ← connection declared FIRST before any query
@@ -40,17 +42,16 @@ export async function POST(req, { params }) {
       [sales_ID]
     );
 
-    const total          = Number(sale.sales_totalAmount);
-    const alreadyPaid    = Number(total_paid);
-    const currentBalance = total - alreadyPaid;
-    const paid           = Number(amount);
+    const total          = normalizeCurrency(sale.sales_totalAmount);
+    const alreadyPaid    = normalizeCurrency(total_paid);
+    const currentBalance = normalizeCurrency(total - alreadyPaid);
 
     // 3. Overpayment guard
     if (paid > currentBalance) {
       throw new Error(`Payment of ₱${paid.toFixed(2)} exceeds remaining balance of ₱${currentBalance.toFixed(2)}.`);
     }
 
-    const newBalance = Math.max(0, currentBalance - paid);
+    const newBalance = normalizeCurrency(Math.max(0, currentBalance - paid));
 
     // 4. Determine new payment status
     let newStatus;
@@ -62,7 +63,7 @@ export async function POST(req, { params }) {
     await connection.query(
       `INSERT INTO tbl_payment_details
          (sales_ID, employee_ID, payment_amount, payment_ORNumber, payment_type, payment_paidDate)
-       VALUES (?, ?, ?, ?, ?, CURDATE())`,
+       VALUES (?, ?, ?, ?, ?, ?)`,
       [sales_ID, employee_id, paid, or_number || null, type || "Cash", paid_date || new Date().toISOString().split("T")[0]]
     );
 
