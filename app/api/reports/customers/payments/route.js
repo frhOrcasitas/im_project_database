@@ -13,6 +13,7 @@ export async function GET(req) {
         pd.payment_type,
         pd.payment_amount,
         s.sales_ID,
+        s.sales_SINumber,
         s.sales_totalAmount,
         (s.sales_totalAmount - IFNULL((
           SELECT SUM(p2.payment_amount) FROM tbl_payment_details p2 WHERE p2.sales_ID = s.sales_ID

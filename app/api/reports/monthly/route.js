@@ -22,7 +22,8 @@ export async function GET(request) {
       SELECT 
         s.sales_ID, c.client_name, s.sales_createdAt, s.sales_totalAmount,
         ${balanceExpr} AS sales_Balance,
-        s.sales_paymentStatus
+        s.sales_paymentStatus,
+        s.sales_SINumber
       FROM tbl_sales s
       LEFT JOIN tbl_client c ON s.client_ID = c.client_ID
     `;

@@ -11,6 +11,8 @@ const txBadge = (status) => {
   return <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${map[status] || "bg-slate-100"}`}>{status}</span>;
 };
 
+const formatSalesRef = (tx) => tx.sales_SINumber ? `SI-${tx.sales_SINumber}` : `ORD-${tx.sales_ID}`;
+
 export default function Customers() {
   const [customers, setCustomers] = useState([]);
   const [selected, setSelected] = useState(null);
@@ -267,7 +269,11 @@ export default function Customers() {
                     {transactions.length > 0 ? transactions.map((tx) => (
                       <tr key={tx.sales_ID} className="hover:bg-slate-50 transition-colors">
                         <td className="px-6 py-4 text-slate-600">{new Date(tx.sales_Date).toLocaleDateString()}</td>
-                        <td className="px-6 py-4 font-mono font-bold text-blue-600">INV-{tx.sales_ID}</td>
+                        <td className="px-6 py-4">
+                          <span className="inline-flex items-center rounded-full bg-slate-100 px-2.5 py-1 text-xs font-semibold text-blue-700">
+                            {formatSalesRef(tx)}
+                          </span>
+                        </td>
                         <td className="px-6 py-4 text-slate-800 font-semibold">₱{Number(tx.sales_totalAmount).toLocaleString()}</td>
                         <td className="px-6 py-4 text-red-500 font-bold">₱{Number(tx.sales_Balance).toLocaleString()}</td>
                         <td className="px-6 py-4 text-right">{txBadge(tx.sales_paymentStatus)}</td>
@@ -347,17 +353,17 @@ export default function Customers() {
         
         <form onSubmit={handlePaymentSubmit} className="flex flex-col gap-4">
           <div>
-          <label className="text-[10px] font-bold text-slate-400 uppercase">Select Unpaid Invoice</label>
+          <label className="text-[10px] font-bold text-slate-400 uppercase">Select Unpaid Sale</label>
           <select 
             className="w-full border border-slate-200 p-2.5 rounded-lg bg-slate-50 text-sm outline-none focus:ring-2 focus:ring-blue-500" 
             required
             value={paymentForm.sales_id}
             onChange={e => setPaymentForm({...paymentForm, sales_id: e.target.value})}
           >
-            <option value="">-- Choose Invoice --</option>
+            <option value="">-- Choose Sale --</option>
             {transactions.filter(t => t.sales_Balance > 0).map(t => (
               <option key={t.sales_ID} value={t.sales_ID}>
-                INV-{t.sales_ID} (Bal: ₱{Number(t.sales_Balance).toLocaleString()})
+                {formatSalesRef(t)} (Bal: ₱{Number(t.sales_Balance).toLocaleString()})
               </option>
             ))}
           </select>

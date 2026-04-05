@@ -4,7 +4,7 @@ export async function GET(req, { params }) {
     const { id } = await params;
     try {
         const [rows] = await pool.query(
-            `SELECT sales_ID, sales_Date, sales_totalAmount, sales_Balance, sales_paymentStatus 
+            `SELECT sales_ID, sales_Date, sales_totalAmount, sales_Balance, sales_paymentStatus, sales_SINumber 
              FROM tbl_sales WHERE client_ID = ? ORDER BY sales_Date DESC LIMIT 10`,
             [id]
         );

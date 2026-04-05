@@ -13,7 +13,6 @@ const REPORT_TYPES = [
   { key: "monthly",      icon: "📆", title: "Monthly Sales",   desc: "Month-over-month sales breakdown" },
   { key: "revenue",      icon: "💰", title: "Yearly Revenue",  desc: "Annual revenue overview" },
   { key: "top-products", icon: "🏆", title: "Top Products",    desc: "Best sellers by volume" },
-  { key: "inventory",    icon: "📦", title: "Inventory",       desc: "Current stock levels and valuation" },
   { key: "aging",        icon: "⏳", title: "Aging Report",    desc: "Accounts receivable aging analysis" },
   { key: "customers",    icon: "👥", title: "Customers",       desc: "Customer purchases and balances" },
 ];
@@ -135,7 +134,7 @@ function TransactionsTable({ transactions, onExport }) {
                 <tr><td colSpan={6} className="px-4 py-8 text-center text-slate-400 text-sm italic">No transactions found.</td></tr>
               ) : filtered.map((t, i) => (
                 <tr key={i} className="border-t border-slate-50 hover:bg-slate-50">
-                  <td className="px-4 py-3 font-semibold text-blue-600">ORD-{t.sales_ID}</td>
+                  <td className="px-4 py-3 font-semibold text-blue-600">{t.sales_SINumber ? `SI-${t.sales_SINumber}` : `ORD-${t.sales_ID}`}</td>
                   <td className="px-4 py-3 font-medium text-slate-700">{t.client_name}</td>
                   <td className="px-4 py-3 text-slate-500 whitespace-nowrap">
                     {new Date(t.sales_createdAt).toLocaleDateString("en-PH", { month: "short", day: "numeric", year: "numeric" })}
@@ -305,51 +304,6 @@ function TopProductsResult({ data }) {
   );
 }
 
-function InventoryResult({ data }) {
-  const rows = Array.isArray(data) ? data : [];
-  if (!rows.length) return <EmptyState message="No inventory data found." />;
-  const LOW = 10;
-  const totalValue = rows.reduce((s, p) => s + Number(p.inventory_value || 0), 0);
-  const lowCount   = rows.filter((p) => Number(p.product_stockQty) <= LOW && Number(p.product_stockQty) > 0).length;
-  const outCount   = rows.filter((p) => Number(p.product_stockQty) <= 0).length;
-  return (
-    <div className="flex flex-col gap-4">
-      <div className="grid grid-cols-3 gap-3">
-        <StatCard label="Total Products" value={rows.length} color="text-blue-600" />
-        <StatCard label="Low Stock"      value={lowCount}    color="text-amber-600" />
-        <StatCard label="Out of Stock"   value={outCount}    color="text-red-600" />
-      </div>
-      <SectionHeader title="Stock Levels" count={rows.length} onExport={() => exportCSV(rows, "inventory_report")} />
-      <TableWrapper
-        headers={["Product", "Stock (cases)", "Unit Price", "Value", "Status"]}
-        footer={
-          <tr>
-            <td colSpan={3} className="px-4 py-3 text-xs font-bold text-slate-500 uppercase">Total Inventory Value</td>
-            <td className="px-4 py-3 font-bold text-green-700">₱{fmt(totalValue)}</td>
-            <td />
-          </tr>
-        }
-      >
-        {rows.map((p, i) => {
-          const qty = Number(p.product_stockQty);
-          const badge = qty <= 0 ? "bg-red-100 text-red-700" : qty <= LOW ? "bg-amber-100 text-amber-700" : "bg-green-100 text-green-700";
-          const label = qty <= 0 ? "Out of Stock" : qty <= LOW ? "Low Stock" : "In Stock";
-          return (
-            <tr key={i} className="border-t border-slate-50 hover:bg-slate-50">
-              <td className="px-4 py-3 font-medium text-slate-700">{p.product_name}</td>
-              <td className="px-4 py-3 font-semibold text-slate-800">{qty.toLocaleString()}</td>
-              <td className="px-4 py-3 text-slate-600">₱{fmt(p.product_unitPrice)}</td>
-              <td className="px-4 py-3 text-slate-600">₱{fmt(p.inventory_value)}</td>
-              <td className="px-4 py-3">
-                <span className={"text-xs font-semibold px-2.5 py-1 rounded-full " + badge}>{label}</span>
-              </td>
-            </tr>
-          );
-        })}
-      </TableWrapper>
-    </div>
-  );
-}
 
 function AgingResult({ data }) {
   const rows = Array.isArray(data) ? data : [];
@@ -384,7 +338,7 @@ function AgingResult({ data }) {
           return (
             <tr key={i} className="border-t border-slate-50 hover:bg-slate-50">
               <td className="px-4 py-3 font-medium text-slate-700">{r.client_name}</td>
-              <td className="px-4 py-3 text-blue-600 font-semibold">#{r.sales_ID}</td>
+              <td className="px-4 py-3 text-blue-600 font-semibold">#{r.sales_SINumber ? `SI-${r.sales_SINumber}` : `ORD-${r.sales_ID}`}</td>
               <td className="px-4 py-3 text-slate-500">
                 {new Date(r.sales_createdAt).toLocaleDateString("en-PH", { month: "short", day: "numeric", year: "numeric" })}
               </td>
@@ -494,7 +448,7 @@ function CustomersResult({ data }) {
                       </td>
                       <td className="px-4 py-3 text-slate-600">{p.payment_type}</td>
                       <td className="px-4 py-3 font-semibold text-green-700">₱{fmt(p.payment_amount)}</td>
-                      <td className="px-4 py-3 font-semibold text-blue-600">ORD-{p.sales_ID}</td>
+                      <td className="px-4 py-3 font-semibold text-blue-600">{p.sales_SINumber ? `SI-${p.sales_SINumber}` : `ORD-${p.sales_ID}`}</td>
                       <td className="px-4 py-3 text-slate-600">₱{fmt(p.sales_totalAmount)}</td>
                       <td className="px-4 py-3">
                         <span className={Number(p.remaining_balance) > 0 ? "font-bold text-red-600" : "text-green-600 font-semibold"}>
@@ -529,7 +483,6 @@ export default function ReportsPage() {
     if (activeType === "monthly")      return `/api/reports/monthly?month=${month}`;
     if (activeType === "revenue")      return `/api/reports/yearly?year=${year}`;
     if (activeType === "top-products") return "/api/reports/top-products";
-    if (activeType === "inventory")    return "/api/reports/inventory";
     if (activeType === "aging")        return "/api/reports/aging";
     if (activeType === "customers")    return "/api/reports/customers";
     return null;
@@ -560,7 +513,6 @@ export default function ReportsPage() {
     if (activeType === "monthly")      return <MonthlyResult      data={result} />;
     if (activeType === "revenue")      return <RevenueResult      data={result} />;
     if (activeType === "top-products") return <TopProductsResult  data={result} />;
-    if (activeType === "inventory")    return <InventoryResult    data={result} />;
     if (activeType === "aging")        return <AgingResult        data={result} />;
     if (activeType === "customers")    return <CustomersResult    data={result} />;
     return null;

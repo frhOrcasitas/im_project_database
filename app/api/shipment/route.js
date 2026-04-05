@@ -41,12 +41,13 @@ export async function POST(request) {
       const productID = item.productLine_ID;
 
       const [sold] = await connection.query(
-        `SELECT salesDetail_qty FROM tbl_sales_details 
-         WHERE sales_ID = ? AND productLine_ID = ?`,
+        `SELECT COALESCE(SUM(salesDetail_qty), 0) AS total_qty 
+        FROM tbl_sales_details 
+        WHERE sales_ID = ? AND productLine_ID = ?`,
         [sales_ID, productID]
       );
-      if (!sold.length) throw new Error(`Item not found in sale: product ${productID}`);
-
+      if (!sold[0].total_qty) throw new Error(`Item not found in sale: product ${productID}`);
+      
       const [shipped] = await connection.query(
         `SELECT IFNULL(SUM(sp.product_quantity), 0) AS shipped_qty
          FROM tbl_shipment_productdetails sp

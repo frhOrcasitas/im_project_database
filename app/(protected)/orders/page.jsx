@@ -260,7 +260,17 @@ function ShipModal({ order, onClose, onSuccess }) {
           manager_id: form.manager_id,
           vehicle_id: form.vehicle_id,
           shipment_DRNumber: form.dr_number,
-          items:      items.map(i => ({ productLine_ID: i.productLine_ID || i.product_ID, quantity: i.ship_qty })),
+          items:      Object.values(
+            items.reduce((acc, i) => {
+              const key = i.productLine_ID || i.product_ID;
+              if (acc[key]) {
+                acc[key].quantity += Number(i.ship_qty);
+              } else {
+                acc[key] = { productLine_ID: key, quantity: Number(i.ship_qty) };
+              }
+              return acc;
+            }, {})
+          ),
           employees:  form.selectedEmployees,
         }),
       });
@@ -271,7 +281,7 @@ function ShipModal({ order, onClose, onSuccess }) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ status: "In Transit" }),
       });
-      onSuccess(`Shipment created for Order #ORD-${order.sales_ID}`);
+      onSuccess(`Shipment created for Order #${order.sales_SINumber ? `SI-${order.sales_SINumber}` : `ORD-${order.sales_ID}`}`);
       onClose();
     } catch (err) {
       setError(err.message);
@@ -286,7 +296,7 @@ function ShipModal({ order, onClose, onSuccess }) {
         <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between shrink-0">
           <div>
             <h2 className="text-lg font-bold text-slate-800">🚚 Create Shipment</h2>
-            <p className="text-xs text-slate-500 mt-0.5">Order #ORD-{order.sales_ID} · {order.client_name}</p>
+            <p className="text-xs text-slate-500 mt-0.5">Order #{order.sales_SINumber ? `SI-${order.sales_SINumber}` : `ORD-${order.sales_ID}`} · {order.client_name}</p>
           </div>
           <button onClick={onClose} className="text-slate-400 hover:text-slate-600 w-8 h-8 flex items-center justify-center rounded-lg hover:bg-slate-100">✕</button>
         </div>
@@ -914,7 +924,9 @@ export default function Orders() {
   };
 
   const updateOrderStatus = async (orderId, newStatus) => {
-    const msg = newStatus === "Cancelled" ? "Are you sure? This will return items to stock." : `Change order #ORD-${orderId} to ${newStatus}?`;
+    const order = sales.find(s => s.sales_ID === orderId);
+    const orderRef = order?.sales_SINumber ? `SI-${order.sales_SINumber}` : `ORD-${orderId}`;
+    const msg = newStatus === "Cancelled" ? "Are you sure? This will return items to stock." : `Change order #${orderRef} to ${newStatus}?`;
     if (!confirm(msg)) return;
     try {
       const res = await fetch(`/api/sales/${orderId}`, {
@@ -1010,7 +1022,8 @@ export default function Orders() {
               <tbody className="divide-y divide-slate-50">
                 {filtered.map(s => (
                   <tr key={s.sales_ID} className="hover:bg-slate-50 transition-colors group">
-                    <td className="py-4 px-3 font-bold text-blue-600">#ORD-{s.sales_ID}</td>
+                    <td className="py-4 px-3 font-bold text-blue-600">#{s.sales_SINumber ? `SI-${s.sales_SINumber}` : `ORD-${s.sales_ID}`}</td>
+                    
                     <td className="py-4 px-3 text-slate-700 font-medium">{s.client_name}</td>
                     <td className="py-4 px-3 text-slate-500">{new Date(s.sales_createdAt).toLocaleDateString()}</td>
                     <td className="py-4 px-3 font-bold text-slate-800">₱{Number(s.sales_totalAmount).toLocaleString()}</td>
@@ -1098,7 +1111,7 @@ export default function Orders() {
           <div className="bg-white rounded-2xl w-full max-w-2xl shadow-xl overflow-hidden">
             <div className="p-6 border-b border-slate-100 flex justify-between items-center">
               <div>
-                <h2 className="text-xl font-bold text-slate-800">Order #ORD-{viewingOrder.sales_ID}</h2>
+                <h2 className="text-xl font-bold text-slate-800">Order #{viewingOrder.sales_SINumber ? `SI-${viewingOrder.sales_SINumber}` : `ORD-${viewingOrder.sales_ID}`}</h2>
                 <p className="text-sm text-slate-500">Customer: {viewingOrder.client_name}</p>
               </div>
               <button onClick={() => setIsViewModalOpen(false)} className="text-slate-400 hover:text-slate-600 text-2xl">&times;</button>
@@ -1187,8 +1200,10 @@ export default function Orders() {
                 <tbody className="divide-y divide-slate-50">
                   {filteredShipments.map(sh => (
                     <tr key={sh.shipment_ID} className="hover:bg-slate-50 transition-colors group">
-                      <td className="py-3 px-3 font-bold text-slate-600">SHP-{sh.shipment_ID}</td>
-                      <td className="py-3 px-3 font-bold text-blue-600">#ORD-{sh.sales_ID}</td>
+                      <td className="py-3 px-3 font-bold text-slate-600">{sh.shipment_DRNumber 
+                        ? `DR-${sh.shipment_DRNumber}` 
+                        : `SHP-${sh.shipment_ID}`}</td>
+                      <td className="py-3 px-3 font-bold text-blue-600">#{sh.sales_SINumber ? `SI-${sh.sales_SINumber}` : `ORD-${sh.sales_ID}`}</td>
                       <td className="py-3 px-3 text-slate-700 font-medium">{sh.client_name}</td>
                       <td className="py-3 px-3 text-slate-500">{new Date(sh.shipment_date).toLocaleDateString()}</td>
                       <td className="py-3 px-3 text-slate-600">
@@ -1228,7 +1243,7 @@ export default function Orders() {
             <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between shrink-0">
               <div>
                 <h2 className="text-lg font-bold text-slate-800">SHP-{shipmentDetail.shipment.shipment_ID} Details</h2>
-                <p className="text-xs text-slate-500 mt-0.5">Order #ORD-{shipmentDetail.shipment.sales_ID} · {shipmentDetail.shipment.client_name}</p>
+                <p className="text-xs text-slate-500 mt-0.5">Order #{shipmentDetail.shipment.sales_SINumber ? `SI-${shipmentDetail.shipment.sales_SINumber}` : `ORD-${shipmentDetail.shipment.sales_ID}`} · {shipmentDetail.shipment.client_name}</p>
               </div>
               <button onClick={() => setShipmentDetailOpen(false)} className="text-slate-400 hover:text-slate-600 w-8 h-8 flex items-center justify-center rounded-lg hover:bg-slate-100">✕</button>
             </div>

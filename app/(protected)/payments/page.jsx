@@ -178,7 +178,7 @@ function SalesList({ selectedId, onSelect }) {
                   <div className="min-w-0">
                     <div className="text-sm font-semibold text-slate-800 truncate">{s.client_name}</div>
                     <div className="text-xs text-slate-400 mt-0.5">
-                      Sale #{s.sales_ID} ·{" "}
+                      Sale #{s.sales_SINumber ? `SI-${s.sales_SINumber}` : `ORD-${s.sales_ID}`} ·{" "}
                       {new Date(s.sales_createdAt).toLocaleDateString("en-PH", {
                         month: "short", day: "numeric", year: "numeric",
                       })}
@@ -275,6 +275,7 @@ function PaymentPanel({ salesId, onPaymentSuccess }) {
     e.preventDefault();
     if (amountEntered <= 0)        return setError("Please enter a valid amount.");
     if (amountEntered > balance)   return setError(`Amount exceeds remaining balance of ₱${fmt(balance)}.`);
+    if (!form.payment_ORNumber.trim()) return setError("OR Number is required.");
 
     setSubmitting(true);
     setError("");
@@ -362,7 +363,7 @@ function PaymentPanel({ salesId, onPaymentSuccess }) {
           <div className="text-slate-400 text-xs mt-2 mb-0.5">Paid</div>
           <div className="text-green-400 font-semibold text-sm">₱{fmt(totalPaid)}</div>
           <div className="text-slate-400 text-xs mt-2 mb-0.5">Sale #</div>
-          <div className="text-slate-300 font-semibold text-sm">{sale.sales_ID}</div>
+          <div className="text-slate-300 font-semibold text-sm">{sale.sales_SINumber ? `SI-${sale.sales_SINumber}` : `ORD-${sale.sales_ID}`}</div>
         </div>
       </div>
 
@@ -470,12 +471,13 @@ function PaymentPanel({ salesId, onPaymentSuccess }) {
           </div>
 
           <div className="grid grid-cols-2 gap-3">
-            <Field label="OR Number">
+            <Field label="OR Number" required>
               <input
                 className={inputCls}
                 type="text" placeholder="Official receipt # (e.g., OR-0001)"
                 value={form.payment_ORNumber}
                 onChange={(e) => setField("payment_ORNumber", e.target.value)}
+                required
               />
             </Field>
             <Field label="Payment Date" required>
