@@ -92,6 +92,7 @@ export default function Sales() {
     setQuantities(q => ({ ...q, [pid]: { ...q[pid], remainder: parseInt(val) || 0 } }));
 
   const setUnitType = (pid, val, product) => {
+    // Auto-fill price based on unit type
     const defaultPrice = val === "Cases"
       ? (product.product_pricePerCase || product.product_unitPrice)
       : product.product_unitPrice;
@@ -249,22 +250,22 @@ export default function Sales() {
   if (loading) return <div className="p-10 text-center text-gray-900 font-bold">Loading system data...</div>;
 
   return (
-    <div className="p-6 bg-gray-50 min-h-screen font-sans text-gray-900 overflow-x-hidden">
-      <div className="flex justify-between items-center mb-5 flex-wrap gap-3">
+    <div className="p-6 bg-gray-50 min-h-screen font-sans text-gray-900">
+      <div className="flex justify-between items-center mb-5">
         <h1 className="text-3xl font-bold text-gray-900">Create New Sale / Order</h1>
-        <div className="bg-blue-50 border border-blue-200 px-4 py-2 rounded-lg shrink-0">
+        <div className="bg-blue-50 border border-blue-200 px-4 py-2 rounded-lg">
           <p className="text-xs text-blue-600 font-bold uppercase tracking-tight">System Operator</p>
           <p className="text-sm font-black text-blue-900">{currentEmployee.name} (ID: {currentEmployee.id})</p>
         </div>
       </div>
 
       {/* Step Indicator Bar */}
-      <div className="flex items-center gap-2 mb-6 overflow-x-auto pb-1">
+      <div className="flex items-center gap-2 mb-6">
         {steps.map((s, idx) => (
-          <div key={`step-${s.num}`} className="flex items-center gap-2 shrink-0">
+          <div key={`step-${s.num}`} className="flex items-center gap-2">
             <button
               onClick={() => setStep(s.num)}
-              className={`px-5 py-2.5 rounded-md text-sm font-bold border transition-all whitespace-nowrap ${
+              className={`px-5 py-2.5 rounded-md text-sm font-bold border transition-all ${
                 step === s.num
                   ? "bg-blue-600 border-blue-700 text-white shadow-md"
                   : s.complete
@@ -279,8 +280,8 @@ export default function Sales() {
         ))}
       </div>
 
-      <div className="flex flex-col lg:flex-row gap-5 items-start min-w-0">
-        <div className="flex-1 flex flex-col gap-5 min-w-0">
+      <div className="flex gap-5">
+        <div className="flex-1 flex flex-col gap-5">
 
           {/* STEP 1: CUSTOMER INFO */}
           <div className={getSectionClass(1, isStep1Complete)} onClick={() => setStep(1)}>
@@ -369,7 +370,7 @@ export default function Sales() {
               placeholder="Type product name or code..."
               className="w-full border border-gray-400 rounded px-3 py-2 text-sm mb-4" />
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+            <div className="grid grid-cols-3 gap-3">
               {filteredProducts.map((product) => {
                 const pid        = product.product_ID;
                 const outOfStock = product.product_stockQty <= 0;
@@ -489,8 +490,8 @@ export default function Sales() {
         </div>
 
         {/* STEP 3: ORDER SUMMARY */}
-        <div className="w-full lg:w-80 lg:flex-shrink-0">
-          <div className={`${getSectionClass(3, isStep3Complete)} lg:sticky lg:top-6`}>
+        <div className="w-80 flex-shrink-0">
+          <div className={`${getSectionClass(3, isStep3Complete)} sticky top-6`}>
             <h2 className="text-xl font-black text-gray-900 mb-4 border-b pb-2">Order Summary</h2>
 
             <div className="mb-3">
