@@ -1,16 +1,12 @@
-import mysql from "mysql2/promise";
+import { createClient } from "@supabase/supabase-js";
 
-const pool = mysql.createPool({
-    host: process.env.DB_HOST || "localhost",
-    user: process.env.DB_USER || "root",
-    password: process.env.DB_PASSWORD || "",
-    database: process.env.DB_NAME ||"db_mrintcorp",
-    waitForConnections: true,
-    connectionLimit: 10,
-    queueLimit: 0,
-    enableKeepAlive: true,
-    keepAliveInitialDelay: 0,
-    port: 3306
-});
+const NEXT_PUBLIC_SUPABASE_URL= process.env.NEXT_PUBLIC_SUPABASE_URL
+const NEXT_PUBLIC_SUPABASE_ANON_KEY= process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
 
-export default pool;
+if (!NEXT_PUBLIC_SUPABASE_URL || !NEXT_PUBLIC_SUPABASE_ANON_KEY) {
+  console.error("Supabase environment variables are missing!");
+}
+
+export const supabase = createClient(NEXT_PUBLIC_SUPABASE_URL, NEXT_PUBLIC_SUPABASE_ANON_KEY);
+
+export default supabase;
