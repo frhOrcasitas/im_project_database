@@ -1,12 +1,19 @@
 import { cookies } from "next/headers";
+import { NextResponse } from "next/server";
 
 export async function GET() {
   try {
     const cookieStore = await cookies();
-    const session = cookieStore.get("session")?.value;
-    if (!session) return Response.json({ user: null });
-    return Response.json({ user: JSON.parse(session) });
-  } catch {
-    return Response.json({ user: null });
+    const sessionCookie = cookieStore.get("session");
+    
+    if (!sessionCookie || !sessionCookie.value) {
+      return NextResponse.json({ user: null });
+    }
+
+    const userData = JSON.parse(sessionCookie.value);
+    return NextResponse.json({ user: userData });
+  } catch (error) {
+    console.error("Session parse error:", error);
+    return NextResponse.json({ user: null });
   }
 }
